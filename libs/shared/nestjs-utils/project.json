@@ -1,0 +1,30 @@
+{
+    "name": "shared-nestjs-utils",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "projectType": "library",
+    "sourceRoot": "libs/shared/nestjs-utils/src",
+    "prefix": "operational-dashboard",
+    "tags": [],
+    "targets": {
+        "test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/libs/shared/nestjs-utils"],
+            "options": {
+                "jestConfig": "libs/shared/nestjs-utils/jest.config.js"
+            }
+        },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "libs/shared/nestjs-utils",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        }
+    }
+}

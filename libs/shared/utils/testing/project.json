@@ -1,0 +1,30 @@
+{
+    "name": "shared-utils-testing",
+    "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "libs/shared/utils/testing/src",
+    "projectType": "library",
+    "tags": [],
+    "targets": {
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "libs/shared/utils/testing",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        },
+        "test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/libs/shared/utils/testing"],
+            "options": {
+                "jestConfig": "libs/shared/utils/testing/jest.config.js",
+                "passWithNoTests": true
+            }
+        }
+    }
+}

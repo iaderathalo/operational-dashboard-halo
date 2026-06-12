@@ -1,0 +1,86 @@
+# ------------------------------------------------------------------------
+
+FROM base-images.mgti-dal-so-art.mrshmc.com/mmc/ubuntu/nodejs-24:jammy AS base
+
+RUN apt-get update -qq \
+    && apt-get install -y jq unzip \
+    && apt-get clean
+
+# Install the platform CLI to be used for authenticating with Hashicorp Vault in AWS.
+RUN PLATFORM_VAULT_CLI_VERSION=$(curl -s https://mgti-dal-so-art.mrshmc.com/artifactory/raw/mmc-platform-cli/latest.txt) \   
+    && curl -L -o mpc https://mgti-dal-so-art.mrshmc.com/artifactory/raw/mmc-platform-cli/${PLATFORM_VAULT_CLI_VERSION} \
+    && chmod +x mpc \
+    && mv ./mpc /usr/bin
+
+# Switch to the less-privileged Node user in the container for improved security.
+# See: https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md#non-root-user
+ENV CYPRESS_INSTALL_BINARY=0
+
+RUN useradd -m node
+USER node
+RUN mkdir -p /home/node/app
+WORKDIR /home/node/app
+
+# Reference the ZScaler root CA into the image for potential installations
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.com/ZscalerRootCertificate-2048-SHA256.crt
+
+# ------------------------------------------------------------------------
+
+FROM base AS prod
+
+ARG DIST_FOLDER_LOCATION
+ARG VAULT_TOKEN_RW
+ARG COMMIT_ID
+
+ENV VAULT_TOKEN_DB $VAULT_TOKEN_RW
+ENV DIST_FOLDER_LOCATION="./dist/apps/api/"
+
+COPY --chown=node:node $DIST_FOLDER_LOCATION /home/node/app
+WORKDIR /home/node/app
+RUN mkdir db
+COPY --chown=node:node ./db/*.ts /home/node/app/db
+COPY --chown=node:node ./package-lock.json /home/node/app
+COPY --chown=node:node ./migrations.json /home/node/app
+COPY --chown=node:node ./tsconfig.base.json /home/node/app
+
+
+COPY .npmrc .npmrc
+RUN ls -lrt && cat migrations.json
+# Create the env_script directory
+RUN mkdir -p env_script
+RUN find ./db -name '*_env_*' -exec mv {} ./env_script/ \;
+
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+RUN /bin/bash -c ' \
+    SHORT_COMMIT_ID=${COMMIT_ID:0:5} && \
+    # Find all TypeScript files and append the commit ID to class names
+    find db -name "*.ts" -exec sed -i "s/\(class [A-Za-z_][A-Za-z0-9_]*\)/\1_$SHORT_COMMIT_ID/" {} + \
+'
+
+RUN npm install typescript mongodb mongo-migrate-ts && npx tsc db/* || true
+RUN  npx tsc env_script/* || true
+RUN ls -lrt /home/node/app/db && ls -lrt /home/node/app/env_script
+ENV PATH /home/node/app/node_modules/.bin:$PATH
+
+COPY --chown=node:node ./deployments/docker/entrypointdb.sh ./entrypointdb.sh
+RUN chmod u+x entrypointdb.sh
+ENTRYPOINT ["./entrypointdb.sh"]
+
+
+# Record build metadata in the image
+
+
+ARG BUILD_DATE_TIME
+LABEL BUILD_DATE_TIME $BUILD_DATE_TIME
+ENV BUILD_DATE_TIME $BUILD_DATE_TIME
+
+ARG BUILD_GIT_COMMIT
+LABEL BUILD_GIT_COMMIT $BUILD_GIT_COMMIT
+ENV BUILD_GIT_COMMIT $BUILD_GIT_COMMIT
+
+ARG BUILD_VERSION
+LABEL BUILD_VERSION $BUILD_VERSION
+ENV BUILD_VERSION $BUILD_VERSION
+
+LABEL APPLICATIONKEY "operdas1"

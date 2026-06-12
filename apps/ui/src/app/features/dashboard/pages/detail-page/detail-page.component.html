@@ -1,0 +1,1545 @@
+@if (loadError) {
+    <div class="detail-state detail-state-error">{{ loadError }}</div>
+} @else if (isLoading) {
+    <div class="detail-state">Loading application detail...</div>
+} @else {
+    <div class="detail-screen">
+        <div class="app-header">
+            <div class="app-header-left">
+                <button type="button" class="back-link" (click)="goBack()">
+                    ← Back to Dashboard
+                </button>
+                <div class="app-name">{{ view.name }}</div>
+                <div class="app-meta">
+                    <span class="tier-badge" [ngClass]="'tier-' + view.tier"
+                        >Tier {{ view.tier }}</span
+                    >
+                    <span>{{ view.businessUnit }}</span>
+                    <span>&middot;</span>
+                    <span>{{ view.environment }}</span>
+                    <span>&middot;</span>
+                    <span>{{ view.ownerRole }} · {{ view.owner }}</span>
+                </div>
+                <div class="dual-badges">
+                    <span class="badge" [ngClass]="'b-' + view.health">
+                        <span class="dot"></span>
+                        {{ view.healthLabel }}
+                    </span>
+                    <span class="badge ring-badge" [ngClass]="'b-' + view.perception">
+                        <span class="ring"></span>
+                        {{ view.perceptionLabel }}
+                    </span>
+                </div>
+            </div>
+            <div class="app-header-right">
+                <button type="button" class="btn btn-danger" (click)="openSev1Modal()">
+                    Raise Sev-1
+                </button>
+                <button type="button" class="btn btn-outline">Escalate</button>
+                <button type="button" class="btn btn-outline">Schedule Maintenance</button>
+            </div>
+        </div>
+
+        <div class="tab-bar">
+            <button
+                *ngFor="let tab of tabs"
+                type="button"
+                class="tab"
+                [class.active]="activeTab === tab.id"
+                (click)="setTab(tab.id)"
+            >
+                {{ tab.label }}
+            </button>
+        </div>
+
+        <div class="content">
+            <div class="tab-panel" [class.active]="activeTab === 'overview'">
+                <div class="metrics-row overview-metrics">
+                    <div *ngFor="let metric of view.overviewMetrics" class="metric-card">
+                        <div class="metric-label">{{ metric.label }}</div>
+                        <div
+                            class="metric-value"
+                            [ngClass]="metric.color ? 'value-' + metric.color : ''"
+                        >
+                            {{ metric.value }}
+                        </div>
+                        <div class="metric-trend" [ngClass]="'trend-' + metric.trend">
+                            {{ metric.trendText }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <div class="card-title">Combined Status Timeline</div>
+                            <p>Seven-day health, perception, incidents, and user volume.</p>
+                        </div>
+                        <div class="range-toggle">
+                            <button
+                                type="button"
+                                [class.active]="activeOverviewRange === '24h'"
+                                (click)="setOverviewRange('24h')"
+                            >
+                                24h
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="activeOverviewRange === '7d'"
+                                (click)="setOverviewRange('7d')"
+                            >
+                                7d
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="activeOverviewRange === '30d'"
+                                (click)="setOverviewRange('30d')"
+                            >
+                                30d
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="timeline-row">
+                        <span class="timeline-label">Health</span>
+                        <div class="timeline-bar">
+                            <div
+                                *ngFor="let tone of view.healthTimelineBars"
+                                [ngClass]="'t-' + tone"
+                            ></div>
+                        </div>
+                    </div>
+                    <div class="timeline-row">
+                        <span class="timeline-label">Perception</span>
+                        <div class="timeline-bar">
+                            <div
+                                *ngFor="let tone of view.perceptionTimelineBars"
+                                [ngClass]="'t-' + tone"
+                            ></div>
+                        </div>
+                    </div>
+                    <div class="timeline-row">
+                        <span class="timeline-label">Incidents</span>
+                        <div class="incident-lane">
+                            <div
+                                *ngFor="let marker of view.timelineIncidents"
+                                class="incident-marker"
+                                [style.left]="marker.pos"
+                                [style.background]="marker.color"
+                                [title]="marker.title"
+                            >
+                                {{ marker.sev }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="timeline-row">
+                        <span class="timeline-label">Users</span>
+                        <div class="user-bars">
+                            <div
+                                *ngFor="let bar of view.userTimelineBars"
+                                class="user-bar"
+                                [style.height.%]="bar"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div class="timeline-axis">
+                        <span *ngFor="let tick of view.timelineAxis">{{ tick }}</span>
+                    </div>
+                    <div class="timeline-legend">
+                        <span><span class="legend-dot green"></span>Green</span>
+                        <span><span class="legend-dot amber"></span>Amber</span>
+                        <span><span class="legend-dot red"></span>Red</span>
+                        <span><span class="legend-dot grey"></span>Incident</span>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-title">Feature Health Summary</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Feature</th>
+                                        <th>Status</th>
+                                        <th>Current</th>
+                                        <th>Baseline</th>
+                                        <th class="align-right">Delta</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        *ngFor="let feature of view.features"
+                                        [ngClass]="
+                                            feature.status === 'red'
+                                                ? 'row-red'
+                                                : feature.status === 'amber'
+                                                  ? 'row-amber'
+                                                  : ''
+                                        "
+                                    >
+                                        <td class="semibold">{{ feature.name }}</td>
+                                        <td>
+                                            <span class="f-status">
+                                                <span
+                                                    class="status-dot"
+                                                    [ngClass]="feature.status"
+                                                ></span>
+                                                {{ statusLabel(feature.status, 'health') }}
+                                            </span>
+                                        </td>
+                                        <td>{{ feature.current }}</td>
+                                        <td>{{ feature.baseline }}</td>
+                                        <td class="align-right">
+                                            <span
+                                                class="f-delta"
+                                                [ngClass]="
+                                                    feature.status === 'red'
+                                                        ? 'high'
+                                                        : feature.status === 'amber'
+                                                          ? 'med'
+                                                          : 'ok'
+                                                "
+                                            >
+                                                {{ feature.delta }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Recent Activity</div>
+                        <div class="activity-log">
+                            <div *ngFor="let item of view.activityLog" class="activity-item">
+                                <span class="activity-dot" [ngClass]="item.color"></span>
+                                <span class="activity-time">{{ item.time }}</span>
+                                <span class="activity-text">{{ item.text }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'health'">
+                <div class="card">
+                    <div class="card-title">Health Status Timeline</div>
+                    <div
+                        *ngFor="let row of view.healthRangeTimelines"
+                        class="timeline-row range-row"
+                    >
+                        <span class="timeline-label">{{ row.label }}</span>
+                        <div class="timeline-bar">
+                            <div *ngFor="let tone of row.bars" [ngClass]="'t-' + tone"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-title">Uptime &amp; Error Budget</div>
+                        <div class="metric-pair-grid">
+                            <div>
+                                <span class="metric-caption">Current (30d)</span>
+                                <strong>{{ view.uptime.value }}</strong>
+                            </div>
+                            <div>
+                                <span class="metric-caption">SLA Target</span>
+                                <strong>{{ view.slaTarget }}</strong>
+                            </div>
+                            <div>
+                                <span class="metric-caption">Error Budget</span>
+                                <strong>{{ view.errorBudget.remaining }}</strong>
+                                <small>of {{ view.errorBudget.total }} remaining</small>
+                            </div>
+                            <div>
+                                <span class="metric-caption">Burn Rate</span>
+                                <strong>{{ view.errorBudget.burnRate }}</strong>
+                                <small>{{ view.errorBudget.breach }}</small>
+                            </div>
+                        </div>
+                        <div class="progress-bar large">
+                            <span [style.width.%]="view.errorBudget.pct"></span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Health Check Breakdown</div>
+                        <div class="health-checks">
+                            <div
+                                *ngFor="let check of view.healthChecks"
+                                class="health-check-row"
+                                [class.failing]="!check.ok"
+                            >
+                                <span
+                                    class="hc-icon"
+                                    [class.pass]="check.ok"
+                                    [class.fail]="!check.ok"
+                                    >{{ check.ok ? '✓' : '✗' }}</span
+                                >
+                                <span class="hc-name">{{ check.name }}</span>
+                                <span class="hc-time">{{ check.time }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card chart-card">
+                        <div class="card-title">Response Time (P50 / P90 / P99) — 24h</div>
+                        <div class="chart-stack">
+                            <div
+                                *ngFor="let series of view.responseLatencySeries"
+                                class="chart-series-row"
+                            >
+                                <span class="chart-series-label">{{ series.label }}</span>
+                                <div class="chart-series-bars">
+                                    <span
+                                        *ngFor="let bar of series.bars"
+                                        [ngClass]="series.tone"
+                                        [style.height.%]="bar"
+                                    ></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card">
+                        <div class="card-title">Error Rate — 24h</div>
+                        <div class="chart-series-bars single-series">
+                            <span
+                                *ngFor="let bar of view.errorRateBars"
+                                class="red"
+                                [style.height.%]="bar"
+                            ></span>
+                        </div>
+                        <div class="chart-footnote">
+                            <span>Current: <strong>0.12%</strong></span>
+                            <span>Threshold: 0.5%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Recent Health Events</div>
+                    <div class="table-scroll">
+                        <table class="ftable">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Event</th>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Source</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let event of view.healthEvents">
+                                    <td>{{ event.time }}</td>
+                                    <td>{{ event.event }}</td>
+                                    <td>{{ event.fromLabel }}</td>
+                                    <td>{{ event.toLabel }}</td>
+                                    <td>{{ event.source }}</td>
+                                    <td>{{ event.duration }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'perception'">
+                <div class="card perception-hero">
+                    <div>
+                        <span class="card-kicker">Performance Degradation</span>
+                        <h2>Feature latency is driving user sentiment below target.</h2>
+                        <p>
+                            Since {{ view.perceptionSince }} ({{ view.perceptionDuration }} ago).
+                            Worst offender: {{ view.features[0].name }}.
+                        </p>
+                    </div>
+                    <div class="gauge-wrap">
+                        <svg class="gauge" viewBox="0 0 120 120">
+                            <circle
+                                class="gauge-bg"
+                                cx="60"
+                                cy="60"
+                                r="50"
+                                transform="rotate(-90 60 60)"
+                                stroke-dasharray="235.6"
+                                stroke-dashoffset="0"
+                            ></circle>
+                            <circle
+                                class="gauge-fill"
+                                [ngClass]="view.perception"
+                                cx="60"
+                                cy="60"
+                                r="50"
+                                transform="rotate(-90 60 60)"
+                                stroke-dasharray="235.6"
+                                [attr.stroke-dashoffset]="perceptionGaugeOffset()"
+                            ></circle>
+                            <text class="gauge-text" x="60" y="56">{{ view.perceptionScore }}</text>
+                            <text class="gauge-label" x="60" y="74">/ 100</text>
+                        </svg>
+                        <span class="gauge-caption">Perception Score</span>
+                    </div>
+                </div>
+
+                <div class="feature-grid">
+                    <div
+                        *ngFor="let feature of view.features"
+                        class="feature-card"
+                        [ngClass]="'fc-' + feature.status"
+                    >
+                        <div class="fc-header">
+                            <div>
+                                <div class="fc-name">
+                                    {{ feature.critical ? '★ ' : '' }}{{ feature.name }}
+                                </div>
+                                <p>{{ feature.detail }}</p>
+                            </div>
+                            <span class="badge" [ngClass]="'b-' + feature.status">
+                                <span class="dot"></span>
+                                {{ statusLabel(feature.status, 'perception') }}
+                            </span>
+                        </div>
+                        <div class="fc-body">
+                            <div class="fc-row">
+                                <span class="label">Current</span
+                                ><span class="val">{{ feature.current }}</span>
+                            </div>
+                            <div class="fc-row">
+                                <span class="label">Baseline</span
+                                ><span class="val">{{ feature.baseline }}</span>
+                            </div>
+                            <div class="fc-row">
+                                <span class="label">Delta</span
+                                ><span
+                                    class="val f-delta"
+                                    [ngClass]="
+                                        feature.status === 'red'
+                                            ? 'high'
+                                            : feature.status === 'amber'
+                                              ? 'med'
+                                              : 'ok'
+                                    "
+                                    >{{ feature.delta }}</span
+                                >
+                            </div>
+
+                            <div class="fc-threshold">
+                                <div class="zone green" [style.width.%]="feature.amberPct"></div>
+                                <div
+                                    class="zone amber"
+                                    [style.width.%]="feature.redPct - feature.amberPct"
+                                ></div>
+                                <div class="zone red"></div>
+                                <div class="fc-marker" [style.left.%]="feature.markerPct"></div>
+                            </div>
+                            <div class="fc-threshold-labels">
+                                <span>0</span>
+                                <span>{{ feature.amberMs / 1000 }}s</span>
+                                <span>{{ feature.redMs / 1000 }}s</span>
+                            </div>
+
+                            <div class="fc-sparkline">
+                                <span
+                                    *ngFor="let height of feature.sparkHeights"
+                                    [style.height.%]="height"
+                                    [ngClass]="feature.status"
+                                ></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="section-head">
+                        <div>
+                            <div class="card-title">Feature Performance Over Time</div>
+                            <p>Trend lines across the most user-visible flows.</p>
+                        </div>
+                        <div class="range-toggle">
+                            <button
+                                type="button"
+                                [class.active]="activePerceptionRange === '1h'"
+                                (click)="setPerceptionRange('1h')"
+                            >
+                                1h
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="activePerceptionRange === '6h'"
+                                (click)="setPerceptionRange('6h')"
+                            >
+                                6h
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="activePerceptionRange === '24h'"
+                                (click)="setPerceptionRange('24h')"
+                            >
+                                24h
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="activePerceptionRange === '7d'"
+                                (click)="setPerceptionRange('7d')"
+                            >
+                                7d
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chart-stack tall">
+                        <div
+                            *ngFor="let series of view.performanceTrendSeries"
+                            class="chart-series-row"
+                        >
+                            <span class="chart-series-label">{{ series.label }}</span>
+                            <div class="chart-series-bars">
+                                <span
+                                    *ngFor="let bar of series.bars"
+                                    [ngClass]="series.tone"
+                                    [style.height.%]="bar"
+                                ></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <div class="card-title">Perception Heatmap — Last 14 Days</div>
+                            <p>Hourly experience quality across the service.</p>
+                        </div>
+                        <select class="filter-select">
+                            <option>Overall Rollup</option>
+                            <option *ngFor="let feature of view.features">
+                                {{ feature.name }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="heatmap-scroll">
+                        <div class="heatmap-hours">
+                            <span *ngFor="let hour of heatmapHours">{{ hour }}</span>
+                        </div>
+                        <div class="heatmap">
+                            <div *ngFor="let row of view.heatmapRows" class="heatmap-row">
+                                <span class="heatmap-label">{{ row.label }}</span>
+                                <div
+                                    *ngFor="let cell of row.cells"
+                                    class="heatmap-cell"
+                                    [ngClass]="'hm-' + cell.tone"
+                                    [title]="cell.title"
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Feature Comparison</div>
+                    <div class="table-scroll">
+                        <table class="ftable">
+                            <thead>
+                                <tr>
+                                    <th>Feature</th>
+                                    <th>Critical</th>
+                                    <th>Status</th>
+                                    <th>Current</th>
+                                    <th>Baseline</th>
+                                    <th>Amber Thr.</th>
+                                    <th>Red Thr.</th>
+                                    <th>Timeout%</th>
+                                    <th class="align-right">Delta</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    *ngFor="let feature of view.features"
+                                    [ngClass]="
+                                        feature.status === 'red'
+                                            ? 'row-red'
+                                            : feature.status === 'amber'
+                                              ? 'row-amber'
+                                              : ''
+                                    "
+                                >
+                                    <td class="semibold">{{ feature.name }}</td>
+                                    <td>{{ feature.critical ? '★' : '' }}</td>
+                                    <td>
+                                        <span class="f-status">
+                                            <span
+                                                class="status-dot"
+                                                [ngClass]="feature.status"
+                                            ></span>
+                                            {{ statusLabel(feature.status, 'perception') }}
+                                        </span>
+                                    </td>
+                                    <td>{{ feature.current }}</td>
+                                    <td>{{ feature.baseline }}</td>
+                                    <td>{{ feature.amberMs / 1000 }}s</td>
+                                    <td>{{ feature.redMs / 1000 }}s</td>
+                                    <td>{{ feature.timeout }}</td>
+                                    <td class="align-right">
+                                        <span
+                                            class="f-delta"
+                                            [ngClass]="
+                                                feature.status === 'red'
+                                                    ? 'high'
+                                                    : feature.status === 'amber'
+                                                      ? 'med'
+                                                      : 'ok'
+                                            "
+                                            >{{ feature.delta }}</span
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'ai-tokens'">
+                <div class="card status-banner">
+                    <div>
+                        <span class="badge" [ngClass]="'b-' + view.aiTokens.status">
+                            <span class="dot"></span>
+                            Token Budget {{ view.aiTokens.tokenPct }}%
+                        </span>
+                        <p>
+                            Period: {{ view.aiTokens.periodLabel }} ({{
+                                view.aiTokens.daysElapsed
+                            }}
+                            of {{ view.aiTokens.daysTotal }} days) · Provider:
+                            {{ view.aiTokens.provider }} · Primary model: {{ view.aiTokens.model }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="metrics-row four-up">
+                    <div *ngFor="let metric of view.aiTokens.metricCards" class="metric-card">
+                        <div class="metric-label">{{ metric.label }}</div>
+                        <div
+                            class="metric-value"
+                            [ngClass]="metric.color ? 'value-' + metric.color : ''"
+                        >
+                            {{ metric.value }}
+                        </div>
+                        <div class="metric-trend" [ngClass]="'trend-' + metric.trend">
+                            {{ metric.trendText }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Budget Utilization</div>
+                    <div class="budget-bar">
+                        <span
+                            [style.width.%]="view.aiTokens.tokenPct"
+                            [ngClass]="view.aiTokens.status"
+                        ></span>
+                        <i class="budget-marker warn"></i>
+                        <i class="budget-marker critical"></i>
+                    </div>
+                    <div class="budget-scale">
+                        <span>0%</span>
+                        <span>70% warn</span>
+                        <span>90% critical</span>
+                        <span>100%</span>
+                    </div>
+                    <div class="chart-footnote split">
+                        <span
+                            >Input: <strong>{{ view.aiTokens.inputTokens }}</strong></span
+                        >
+                        <span
+                            >Output: <strong>{{ view.aiTokens.outputTokens }}</strong></span
+                        >
+                        <span
+                            >Budget: <strong>{{ view.aiTokens.tokenPct }}%</strong></span
+                        >
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-title">By Model</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Model</th>
+                                        <th>Tokens</th>
+                                        <th>Requests</th>
+                                        <th class="align-right">Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let model of view.aiTokens.byModel">
+                                        <td class="semibold">{{ model.name }}</td>
+                                        <td>{{ model.tokens }}</td>
+                                        <td>{{ model.requests | number }}</td>
+                                        <td class="align-right">{{ model.cost }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">By Feature</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Feature</th>
+                                        <th>Tokens</th>
+                                        <th>Requests</th>
+                                        <th class="align-right">Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let feature of view.aiTokens.byFeature">
+                                        <td class="semibold">{{ feature.name }}</td>
+                                        <td>{{ feature.tokens }}</td>
+                                        <td>{{ feature.requests | number }}</td>
+                                        <td class="align-right">{{ feature.cost }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Daily Token Usage (7 days)</div>
+                    <div class="daily-bars">
+                        <span
+                            *ngFor="let bar of view.aiTokens.dailyTokenBars; let index = index"
+                            [style.height.%]="bar"
+                            [ngClass]="index === 5 ? 'red' : index >= 3 ? 'amber' : 'accent'"
+                        ></span>
+                    </div>
+                    <div class="budget-scale days">
+                        <span>Apr 1</span>
+                        <span>Apr 2</span>
+                        <span>Apr 3</span>
+                        <span>Apr 4</span>
+                        <span>Apr 5</span>
+                        <span>Apr 6</span>
+                        <span>Apr 7</span>
+                    </div>
+
+                    <div
+                        *ngFor="let anomaly of view.aiTokens.anomalies"
+                        class="anomaly-callout amber"
+                    >
+                        ⚠ {{ anomaly.date }} — {{ anomaly.tokens }} tokens ({{
+                            anomaly.multiplier
+                        }}
+                        avg). {{ anomaly.cause }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'ai-drift'">
+                <div class="card status-banner">
+                    <div>
+                        <span class="badge" [ngClass]="'b-' + view.aiDrift.status">
+                            <span class="dot"></span>
+                            Drift {{ statusLabel(view.aiDrift.status, 'health') }}
+                        </span>
+                        <p>
+                            {{ view.aiDrift.summary }} {{ view.aiDrift.attentionCount }} of
+                            {{ view.aiDrift.models.length }} models need attention.
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    *ngFor="let model of view.aiDrift.models"
+                    class="card drift-card"
+                    [ngClass]="model.status"
+                >
+                    <div class="section-head tight">
+                        <div>
+                            <div class="card-title">
+                                {{ model.isCritical ? '★ ' : '' }}{{ model.name }}
+                            </div>
+                            <p>{{ model.metricType }}</p>
+                        </div>
+                        <span class="status-pill" [ngClass]="model.status">{{
+                            statusLabel(model.status, 'health')
+                        }}</span>
+                    </div>
+
+                    <div class="mini-metric-grid four">
+                        <div>
+                            <span>Accuracy</span>
+                            <strong>{{ model.accuracy }}</strong>
+                            <small>baseline {{ model.baselineAccuracy }}</small>
+                        </div>
+                        <div>
+                            <span>Accuracy Δ</span>
+                            <strong>{{ model.accuracyDelta }}</strong>
+                            <small>from baseline</small>
+                        </div>
+                        <div>
+                            <span>PSI</span>
+                            <strong>{{ model.psi }}</strong>
+                            <small>distribution shift</small>
+                        </div>
+                        <div>
+                            <span>Model Age</span>
+                            <strong>{{ model.staleDays }}</strong>
+                            <small>trained {{ model.lastTrained }}</small>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="metric-caption">Staleness</div>
+                        <div class="budget-bar thin">
+                            <span
+                                [style.width.%]="model.stalenessPct"
+                                [ngClass]="model.stalenessTone"
+                            ></span>
+                        </div>
+                    </div>
+
+                    <div class="two-col drift-detail-grid">
+                        <div>
+                            <div class="metric-caption">Prediction Distribution</div>
+                            <div class="prediction-grid">
+                                <div>
+                                    <span>Reference</span>
+                                    <div class="distribution-bar">
+                                        <i
+                                            class="amber"
+                                            [style.width.%]="model.predictionReference"
+                                        ></i>
+                                        <i class="green"></i>
+                                    </div>
+                                    <small>{{ model.predictionReference }}% positive</small>
+                                </div>
+                                <div>
+                                    <span>Current</span>
+                                    <div class="distribution-bar">
+                                        <i
+                                            class="red"
+                                            [style.width.%]="model.predictionCurrent"
+                                        ></i>
+                                        <i class="green"></i>
+                                    </div>
+                                    <small>{{ model.predictionCurrent }}% positive</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="metric-caption">Data Quality</div>
+                            <div class="mini-metric-grid three compact">
+                                <div>
+                                    <span>Completeness</span
+                                    ><strong>{{ model.dataQuality.completeness }}</strong>
+                                </div>
+                                <div>
+                                    <span>Schema</span
+                                    ><strong>{{ model.dataQuality.schemaConformance }}</strong>
+                                </div>
+                                <div>
+                                    <span>Freshness</span
+                                    ><strong>{{ model.dataQuality.freshnessLag }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="metric-caption">Feature Drift</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Feature</th>
+                                        <th>Status</th>
+                                        <th>Score</th>
+                                        <th>Method</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        *ngFor="let drift of model.featureDrift"
+                                        [ngClass]="
+                                            drift.status === 'red'
+                                                ? 'row-red'
+                                                : drift.status === 'amber'
+                                                  ? 'row-amber'
+                                                  : ''
+                                        "
+                                    >
+                                        <td class="semibold">{{ drift.name }}</td>
+                                        <td>
+                                            <span class="f-status">
+                                                <span
+                                                    class="status-dot"
+                                                    [ngClass]="drift.status"
+                                                ></span>
+                                                {{ statusLabel(drift.status, 'health') }}
+                                            </span>
+                                        </td>
+                                        <td>{{ drift.score }}</td>
+                                        <td>{{ drift.method }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="metric-caption">Accuracy Trend</div>
+                        <div class="daily-bars drift-bars">
+                            <span
+                                *ngFor="let bar of model.accuracyTrendBars"
+                                [style.height.%]="bar"
+                                [ngClass]="model.status"
+                            ></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Model Events</div>
+                    <div class="stack-list events-list">
+                        <div *ngFor="let event of view.aiDrift.events" class="stack-row event-row">
+                            <span class="event-date">{{ event.date }}</span>
+                            <strong>{{ event.text }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'cost'">
+                <div class="card status-banner">
+                    <div>
+                        <span class="badge" [ngClass]="'b-' + view.infraCost.status">
+                            <span class="dot"></span>
+                            Cost Over Budget
+                        </span>
+                        <p>
+                            April 2026 · Monthly budget {{ view.infraCost.monthlyBudget }} · Daily
+                            burn remains elevated.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="metrics-row four-up">
+                    <div *ngFor="let metric of view.infraCost.metricCards" class="metric-card">
+                        <div class="metric-label">{{ metric.label }}</div>
+                        <div
+                            class="metric-value"
+                            [ngClass]="metric.color ? 'value-' + metric.color : ''"
+                        >
+                            {{ metric.value }}
+                        </div>
+                        <div class="metric-trend" [ngClass]="'trend-' + metric.trend">
+                            {{ metric.trendText }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Budget Utilization</div>
+                    <div class="budget-bar">
+                        <span [style.width.%]="100" [ngClass]="view.infraCost.status"></span>
+                        <i class="budget-marker warn"></i>
+                    </div>
+                    <div class="budget-scale">
+                        <span>$0</span>
+                        <span>90% warn</span>
+                        <span>{{ view.infraCost.monthlyBudget }}</span>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-title">By Category</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>MTD</th>
+                                        <th>%</th>
+                                        <th>Distribution</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let category of view.infraCost.byCategory">
+                                        <td class="semibold">{{ category.category }}</td>
+                                        <td>{{ category.mtd }}</td>
+                                        <td>{{ category.pct }}%</td>
+                                        <td>
+                                            <div class="inline-bar">
+                                                <span [style.width.%]="category.pct"></span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">By Data Center</div>
+                        <div class="table-scroll">
+                            <table class="ftable">
+                                <thead>
+                                    <tr>
+                                        <th>Data Center</th>
+                                        <th>MTD</th>
+                                        <th>%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let dataCenter of view.infraCost.byDataCenter">
+                                        <td class="semibold">{{ dataCenter.name }}</td>
+                                        <td>{{ dataCenter.mtd }}</td>
+                                        <td>{{ dataCenter.pct }}%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="subsection">
+                            <div class="metric-caption">Cost Efficiency</div>
+                            <div class="mini-metric-grid three compact">
+                                <div>
+                                    <span>Cost/User</span
+                                    ><strong>{{ view.infraCost.efficiency.costPerUser }}</strong>
+                                </div>
+                                <div>
+                                    <span>Cost/Tx</span
+                                    ><strong>{{
+                                        view.infraCost.efficiency.costPerTransaction
+                                    }}</strong>
+                                </div>
+                                <div>
+                                    <span>Cost/Uptime Hr</span
+                                    ><strong>{{
+                                        view.infraCost.efficiency.costPerUptimeHour
+                                    }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Monthly Cost Trend (12 months)</div>
+                    <div class="daily-bars monthly-trend">
+                        <span
+                            *ngFor="let bar of view.infraCost.monthlyTrendBars; let index = index"
+                            [style.height.%]="bar"
+                            [ngClass]="
+                                index === view.infraCost.monthlyTrendBars.length - 1
+                                    ? view.infraCost.status
+                                    : 'accent'
+                            "
+                        ></span>
+                    </div>
+                    <div class="budget-scale months">
+                        <span>May</span>
+                        <span>Jun</span>
+                        <span>Jul</span>
+                        <span>Aug</span>
+                        <span>Sep</span>
+                        <span>Oct</span>
+                        <span>Nov</span>
+                        <span>Dec</span>
+                        <span>Jan</span>
+                        <span>Feb</span>
+                        <span>Mar</span>
+                        <span>Apr</span>
+                    </div>
+
+                    <div
+                        *ngFor="let anomaly of view.infraCost.anomalies"
+                        class="anomaly-callout amber"
+                    >
+                        ⚠ {{ anomaly.date }} — {{ anomaly.dailySpend }} daily ({{
+                            anomaly.multiplier
+                        }}
+                        avg). {{ anomaly.cause }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'incidents'">
+                <div class="metrics-row three-up">
+                    <div *ngFor="let metric of view.incidentMetricCards" class="metric-card">
+                        <div class="metric-label">{{ metric.label }}</div>
+                        <div class="metric-value">{{ metric.value }}</div>
+                        <div class="metric-trend" [ngClass]="'trend-' + metric.trend">
+                            {{ metric.trendText }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="incident-filters">
+                    <span class="filter-label">Severity:</span>
+                    <select class="filter-select">
+                        <option>All</option>
+                        <option>Sev-1</option>
+                        <option>Sev-2</option>
+                        <option>Sev-3</option>
+                    </select>
+                    <span class="filter-label">Status:</span>
+                    <select class="filter-select">
+                        <option>All</option>
+                        <option>Open</option>
+                        <option>Resolved</option>
+                        <option>Closed</option>
+                    </select>
+                    <span class="filter-label">Range:</span>
+                    <select class="filter-select">
+                        <option>Last 90 days</option>
+                        <option>Last 30 days</option>
+                        <option>Last 7 days</option>
+                    </select>
+                </div>
+
+                <div class="card incident-timeline-card">
+                    <div class="incident-timeline">
+                        <div class="inc-line"></div>
+
+                        <ng-container *ngFor="let incident of view.incidents">
+                            <div class="inc-date">{{ incident.dateHeader }}</div>
+                            <div class="inc-item">
+                                <div class="inc-node" [ngClass]="'sev' + incident.sev"></div>
+                                <div class="inc-card elevated">
+                                    <div class="inc-header">
+                                        <div class="inc-header-left">
+                                            <span class="sev-tag" [ngClass]="'s' + incident.sev"
+                                                >SEV-{{ incident.sev }}</span
+                                            >
+                                            <span class="inc-title">{{ incident.title }}</span>
+                                        </div>
+                                        <span
+                                            class="inc-status"
+                                            [ngClass]="'is-' + incident.status"
+                                            >{{ incident.status }}</span
+                                        >
+                                    </div>
+                                    <div class="inc-meta">{{ incident.meta }}</div>
+                                    <div class="inc-impact">{{ incident.impact }}</div>
+                                    <button
+                                        type="button"
+                                        class="inc-expand"
+                                        (click)="toggleIncident(incident.title)"
+                                    >
+                                        {{
+                                            isIncidentExpanded(incident.title)
+                                                ? '▼ Collapse details'
+                                                : '▶ Expand details'
+                                        }}
+                                    </button>
+                                    <div
+                                        class="inc-details"
+                                        [class.open]="isIncidentExpanded(incident.title)"
+                                    >
+                                        <div *ngIf="incident.rootCause" class="detail-line">
+                                            <strong>Root cause:</strong> {{ incident.rootCause }}
+                                        </div>
+                                        <div *ngIf="incident.resolution" class="detail-line">
+                                            <strong>Resolution:</strong> {{ incident.resolution }}
+                                        </div>
+
+                                        <div
+                                            *ngIf="incident.timeline.length > 0"
+                                            class="detail-block"
+                                        >
+                                            <div class="detail-heading">Timeline</div>
+                                            <div
+                                                *ngFor="let item of incident.timeline"
+                                                class="inc-update"
+                                            >
+                                                <span class="inc-update-time">{{ item.time }}</span>
+                                                <span>{{ item.text }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            *ngIf="incident.actions.length > 0"
+                                            class="incident-actions"
+                                        >
+                                            <button
+                                                *ngFor="let action of incident.actions"
+                                                type="button"
+                                                class="btn"
+                                                [ngClass]="
+                                                    action === 'Add Update'
+                                                        ? 'btn-primary'
+                                                        : 'btn-outline'
+                                                "
+                                            >
+                                                {{ action }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </ng-container>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'contacts'">
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-title">On-Call Now</div>
+                        <div class="contact-grid compact-grid">
+                            <div *ngFor="let contact of view.contacts.onCall" class="contact-card">
+                                <div class="contact-avatar">{{ contact.initials }}</div>
+                                <div>
+                                    <div class="contact-name">{{ contact.name }}</div>
+                                    <div class="contact-role">{{ contact.role }}</div>
+                                    <div class="contact-links">
+                                        <button type="button" class="contact-link">Call</button>
+                                        <button type="button" class="contact-link">Slack</button>
+                                        <button type="button" class="contact-link">Email</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="footnote">{{ view.contacts.onCallRotation }}</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Escalation Path</div>
+                        <div class="contact-grid compact-grid">
+                            <div
+                                *ngFor="let contact of view.contacts.escalation"
+                                class="contact-card"
+                            >
+                                <div class="contact-avatar">{{ contact.initials }}</div>
+                                <div>
+                                    <div class="contact-name">{{ contact.name }}</div>
+                                    <div class="contact-role">{{ contact.role }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Application Team</div>
+                    <div class="contact-grid">
+                        <div *ngFor="let contact of view.contacts.team" class="contact-card">
+                            <div class="contact-avatar">{{ contact.initials }}</div>
+                            <div>
+                                <div class="contact-name">{{ contact.name }}</div>
+                                <div class="contact-role">{{ contact.role }}</div>
+                                <div class="contact-links">
+                                    <button type="button" class="contact-link">Call</button>
+                                    <button type="button" class="contact-link">Slack</button>
+                                    <button type="button" class="contact-link">Email</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Shared Resources</div>
+                    <div class="shared-grid">
+                        <span>Slack Channel</span><strong>{{ view.shared.slack }}</strong>
+                        <span>Email DL</span><strong>{{ view.shared.email }}</strong>
+                        <span>NOC Bridge</span><strong>{{ view.shared.noc }}</strong>
+                        <span>Vendor Support</span><strong>{{ view.shared.vendor }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'settings'">
+                <div class="card">
+                    <div class="card-title">Feature Threshold Configuration</div>
+                    <div class="setting-row header">
+                        <span>Feature</span>
+                        <span>Amber Threshold</span>
+                        <span>Red Threshold</span>
+                        <span></span>
+                    </div>
+                    <div *ngFor="let feature of view.features" class="setting-row thresholds">
+                        <span>{{ feature.name }}</span>
+                        <input class="setting-input" [value]="feature.amberMs / 1000" readonly />
+                        <input class="setting-input" [value]="feature.redMs / 1000" readonly />
+                        <button type="button" class="btn btn-outline small">Save</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Perception API Configuration</div>
+                    <div class="shared-grid form-grid">
+                        <span>Endpoint URL</span>
+                        <input
+                            class="setting-input wide"
+                            [value]="view.settings.endpoint"
+                            readonly
+                        />
+                        <span>Auth Method</span>
+                        <select class="filter-select wide">
+                            <option>OAuth2 Client Credentials</option>
+                        </select>
+                        <span>Poll Interval</span>
+                        <input
+                            class="setting-input wide short"
+                            [value]="view.settings.pollInterval + 's'"
+                            readonly
+                        />
+                    </div>
+                    <div class="button-row">
+                        <button type="button" class="btn btn-primary">Test Connectivity</button>
+                        <button type="button" class="btn btn-outline">Save Configuration</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Notification Preferences</div>
+                    <div class="pref-list">
+                        <label
+                            *ngFor="let pref of view.settings.notificationPreferences"
+                            class="pref-item"
+                        >
+                            <input type="checkbox" [checked]="pref.checked" />
+                            <span>{{ pref.label }}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Maintenance Windows</div>
+                    <div class="table-scroll">
+                        <table class="ftable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time (UTC)</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let window of view.maintenanceWindows">
+                                    <td>{{ window.date }}</td>
+                                    <td>{{ window.time }}</td>
+                                    <td>{{ window.desc }}</td>
+                                    <td>
+                                        <span
+                                            class="badge compact"
+                                            [ngClass]="'b-' + window.status"
+                                        >
+                                            <span class="dot"></span>
+                                            {{ window.statusLabel }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button
+                                            *ngIf="window.canCancel"
+                                            type="button"
+                                            class="btn btn-outline small"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="button-row">
+                        <button type="button" class="btn btn-primary">Schedule Maintenance</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" [class.open]="isSev1ModalOpen">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">⚠ Raise Severity 1 Incident</div>
+                    <button type="button" class="modal-close" (click)="closeSev1Modal()">×</button>
+                </div>
+
+                <div class="modal-steps">
+                    <div
+                        class="modal-step"
+                        [class.active]="modalStep === 1"
+                        [class.done]="modalStep > 1"
+                    >
+                        <span class="step-num">1</span> Identify
+                    </div>
+                    <div
+                        class="modal-step"
+                        [class.active]="modalStep === 2"
+                        [class.done]="modalStep > 2"
+                    >
+                        <span class="step-num">2</span> Notifications
+                    </div>
+                    <div class="modal-step" [class.active]="modalStep === 3">
+                        <span class="step-num">3</span> Confirm
+                    </div>
+                </div>
+
+                <div class="modal-body" *ngIf="modalStep === 1">
+                    <div class="modal-warning">
+                        ⚠ This will trigger emergency notifications to on-call staff, management,
+                        and the incident bridge line.
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Affected Application</label>
+                        <input class="form-input" [value]="view.name" readonly />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Issue Type</label>
+                        <div class="radio-group">
+                            <button
+                                *ngFor="let issueType of issueTypes"
+                                type="button"
+                                class="radio-item"
+                                [class.selected]="selectedIssueType === issueType"
+                                (click)="selectIssueType(issueType)"
+                            >
+                                <span class="radio-dot"></span>
+                                {{ issueType }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Incident Title</label>
+                        <input class="form-input" [(ngModel)]="sev1Title" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Impact Description</label>
+                        <textarea class="form-textarea" [(ngModel)]="sev1Description"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Estimated Users Impacted</label>
+                        <input class="form-input" [value]="view.activeUsers.value" readonly />
+                    </div>
+                </div>
+
+                <div class="modal-body" *ngIf="modalStep === 2">
+                    <div class="section-head tight">
+                        <div>
+                            <div class="card-title">Notification Recipients</div>
+                            <p>The following people will be automatically notified.</p>
+                        </div>
+                    </div>
+
+                    <div class="pref-list">
+                        <label *ngFor="let option of sev1NotifyOptions" class="pref-item boxed">
+                            <input type="checkbox" [(ngModel)]="option.checked" />
+                            <span
+                                ><strong>{{ option.name }}</strong> — {{ option.role }}</span
+                            >
+                        </label>
+                    </div>
+
+                    <div class="section-head tight top-space">
+                        <div>
+                            <div class="card-title">Channels</div>
+                        </div>
+                    </div>
+
+                    <div class="pref-list">
+                        <label *ngFor="let option of sev1ChannelOptions" class="pref-item">
+                            <input type="checkbox" [(ngModel)]="option.checked" />
+                            <span>{{ option.label }}</span>
+                        </label>
+                    </div>
+
+                    <div class="bridge-card">
+                        <strong>Incident Bridge (auto-created)</strong>
+                        <span>https://corp.zoom.us/j/incident-bridge</span>
+                        <small>Dial-in: +1 (555) 000-9999, PIN: 482901#</small>
+                    </div>
+                </div>
+
+                <div class="modal-body" *ngIf="modalStep === 3">
+                    <div class="summary-card">
+                        <div class="shared-grid confirm-grid">
+                            <span>Incident</span><strong>{{ sev1Title }}</strong>
+                            <span>Severity</span><strong>1 (Critical)</strong>
+                            <span>Application</span><strong>{{ view.name }}</strong>
+                            <span>Issue Type</span><strong>{{ selectedIssueType }}</strong>
+                            <span>Impact</span
+                            ><strong>~{{ view.activeUsers.value }} users impacted</strong>
+                            <span>Notifying</span
+                            ><strong
+                                >{{ selectedNotifyCount() }} individuals,
+                                {{ selectedChannelCount() }} channels</strong
+                            >
+                            <span>Bridge</span><strong>Zoom auto-created</strong>
+                        </div>
+                        <p>{{ sev1Description }}</p>
+                    </div>
+
+                    <div class="modal-warning">
+                        ⚠ This action cannot be undone. All selected parties will be immediately
+                        notified.
+                    </div>
+                    <div class="footnote">
+                        Initiated by: <strong>{{ people.currentUser.name }}</strong> ({{
+                            people.currentUser.role
+                        }})
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        *ngIf="modalStep > 1"
+                        type="button"
+                        class="btn btn-outline"
+                        (click)="previousModalStep()"
+                    >
+                        ← Back
+                    </button>
+                    <button type="button" class="btn btn-outline" (click)="closeSev1Modal()">
+                        Cancel
+                    </button>
+                    <button
+                        *ngIf="modalStep < 3"
+                        type="button"
+                        class="btn btn-primary"
+                        (click)="nextModalStep()"
+                    >
+                        Next →
+                    </button>
+                    <button
+                        *ngIf="modalStep === 3"
+                        type="button"
+                        class="btn btn-danger"
+                        (click)="confirmSev1()"
+                    >
+                        Confirm &amp; Raise Incident
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toast" [class.show]="toastVisible">✓ {{ toastMessage }}</div>
+    </div>
+}

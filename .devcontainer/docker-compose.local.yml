@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+    local-dev:
+        image: prod-images.mgti-dal-so-art.mrshmc.com/polaris/images/nodejs-24-build-cypress-env-with-python314:1.0.0
+        volumes:
+            - ..:/home/build/app:cached
+        environment:
+            - NODE_ENV=dev
+            - APIGEE_ORGANIZATION=mmc-bedford-int-non-prod
+            - APIGEE_CLIENT_ID=uw57oNG4XPi8IiMnYJJ0uMaWHQAcZY3mhGobmiuxXKGW2NQ5
+            - API_API_BASE_URL=http://localhost:8080
+            - API_PORT=8080
+            - LOG_REQUEST_HEADERS=
+            - LOG_RESPONSE_HEADERS=
+            - LOG_INCLUDE_TIMESTAMP=true
+            - USE_FRAMEGUARD_MIDDLEWARE=false
+            - USE_HSTS_MIDDLEWARE=false
+            - API_MONGODB_API_DB_URL=mongodb://local-api-db:27017
+            - API_DATASTORE_NAME=app
+        command: sleep infinity
+        depends_on:
+            - local-api-db
+    local-api-db:
+        extends:
+            file: ./services/datastore-mongodb-service.yml
+            service: local-api-db

@@ -1,0 +1,177 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+import { DashboardDetailResponse } from '@operational-dashboard/shared-api-model/model/dashboard';
+
+import environment from '../../../../environments/environment';
+import { Application, DashboardSummary, Incident, Contact } from '../models/dashboard.models';
+import { PortfolioAppContext, PortfolioNode } from '../models/portfolio.model';
+
+@Injectable()
+export default class DashboardService {
+    private baseUrl = environment.apiBaseUrl;
+
+    /**
+     * Creates the dashboard API client.
+     * @param {object} http - HTTP client for backend requests
+     */
+    constructor(private http: HttpClient) {}
+
+    /**
+     * Fetches applications using optional dashboard filters.
+     * @param {object} params - optional application filters
+     * @param {string} [params.status] - health status filter
+     * @param {number} [params.tier] - application tier filter
+     * @param {string} [params.businessUnit] - business unit filter
+     * @param {string} [params.search] - free-text search term
+     * @returns {object} matching applications
+     */
+    getApplications(params?: {
+        status?: string;
+        tier?: number;
+        businessUnit?: string;
+        search?: string;
+    }): Observable<Application[]> {
+        const queryParams: Record<string, string> = {};
+        if (params?.status) queryParams.status = params.status;
+        if (params?.tier) queryParams.tier = String(params.tier);
+        if (params?.businessUnit) queryParams.businessUnit = params.businessUnit;
+        if (params?.search) queryParams.search = params.search;
+
+        return this.http.get<Application[]>(`${this.baseUrl}/applications`, {
+            params: queryParams,
+        });
+    }
+
+    /**
+     * Fetches a single application by id.
+     * @param {string} id - application id
+     * @returns {object} application details
+     */
+    getApplication(id: string): Observable<Application> {
+        return this.http.get<Application>(`${this.baseUrl}/applications/${id}`);
+    }
+
+    /**
+     * Fetches the dashboard summary metrics.
+     * @returns {object} dashboard summary response
+     */
+    getSummary(): Observable<DashboardSummary> {
+        return this.http.get<DashboardSummary>(`${this.baseUrl}/dashboard/summary`);
+    }
+
+    /**
+     * Fetches the portfolio tree used by the dashboard page.
+     * @returns {object} dashboard portfolio tree
+     */
+    getPortfolio(): Observable<PortfolioNode> {
+        return this.http.get<PortfolioNode>(`${this.baseUrl}/dashboard/portfolio`);
+    }
+
+    /**
+     * Fetches the detail context for a portfolio application.
+     * @param {string} id - portfolio application id
+     * @returns {object} application detail context
+     */
+    getPortfolioAppContext(id: string): Observable<PortfolioAppContext> {
+        return this.http.get<PortfolioAppContext>(
+            `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}`
+        );
+    }
+
+    /**
+     * Fetches the full detail-screen payload for a portfolio application.
+     * @param {string} id - portfolio application id
+     * @returns {object} detail-screen response
+     */
+    getPortfolioAppDetail(id: string): Observable<DashboardDetailResponse> {
+        return this.http.get<DashboardDetailResponse>(
+            `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/detail`
+        );
+    }
+
+    /**
+     * Fetches incidents using optional filters.
+     * @param {object} params - optional incident filters
+     * @param {string} [params.status] - incident status filter
+     * @param {string} [params.severity] - incident severity filter
+     * @param {string} [params.applicationId] - application identifier filter
+     * @returns {object} matching incidents
+     */
+    getIncidents(params?: {
+        status?: string;
+        severity?: string;
+        applicationId?: string;
+    }): Observable<Incident[]> {
+        const queryParams: Record<string, string> = {};
+        if (params?.status) queryParams.status = params.status;
+        if (params?.severity) queryParams.severity = params.severity;
+        if (params?.applicationId) queryParams.applicationId = params.applicationId;
+
+        return this.http.get<Incident[]>(`${this.baseUrl}/incidents`, { params: queryParams });
+    }
+
+    /**
+     * Creates a new incident for an application.
+     * @param {object} incident - incident payload to submit
+     * @param {string} incident.applicationId - application identifier
+     * @param {string} incident.severity - incident severity
+     * @param {string} incident.title - incident title
+     * @param {string} incident.description - incident description
+     * @param {string} incident.businessImpactLevel - business impact level
+     * @param {number} incident.estimatedUsersImpacted - estimated impacted users
+     * @param {string} incident.reportedBy - reporting user
+     * @returns {object} created incident record
+     */
+    createIncident(incident: {
+        applicationId: string;
+        severity: string;
+        title: string;
+        description: string;
+        businessImpactLevel: string;
+        estimatedUsersImpacted: number;
+        reportedBy: string;
+    }): Observable<Incident> {
+        return this.http.post<Incident>(`${this.baseUrl}/incidents`, incident);
+    }
+
+    /**
+     * Fetches contacts for a team.
+     * @param {string} teamId - team identifier
+     * @returns {object} team contacts
+     */
+    getContacts(teamId: string): Observable<Contact[]> {
+        return this.http.get<Contact[]>(`${this.baseUrl}/teams/${teamId}/contacts`);
+    }
+
+    /**
+     * Applies a manual status override to an application.
+     * @param {string} applicationId - application identifier
+     * @param {object} override - override payload
+     * @param {string} override.status - override status value
+     * @param {string} override.overriddenBy - override author
+     * @param {string} override.reason - override reason
+     * @returns {object} updated application
+     */
+    setStatusOverride(
+        applicationId: string,
+        override: { status: string; overriddenBy: string; reason: string }
+    ): Observable<Application> {
+        return this.http.put<Application>(
+            `${this.baseUrl}/applications/${applicationId}/status-override`,
+            override
+        );
+    }
+
+    /**
+     * Removes a manual status override from an application.
+     * @param {string} applicationId - application identifier
+     * @returns {object} updated application
+     */
+    clearStatusOverride(applicationId: string): Observable<Application> {
+        return this.http.delete<Application>(
+            `${this.baseUrl}/applications/${applicationId}/status-override`
+        );
+    }
+}

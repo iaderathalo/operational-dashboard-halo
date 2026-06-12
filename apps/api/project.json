@@ -1,0 +1,77 @@
+{
+    "name": "api",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/api/src",
+    "projectType": "application",
+    "tags": [],
+    "targets": {
+        "build": {
+            "executor": "@nx/webpack:webpack",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/api",
+                "main": "apps/api/src/main.ts",
+                "tsConfig": "apps/api/tsconfig.app.json",
+                "assets": ["apps/api/src/assets"],
+                "compiler": "tsc",
+                "target": "node",
+                "webpackConfig": "apps/api/webpack.config.js"
+            },
+            "configurations": {
+                "production": {
+                    "optimization": true,
+                    "extractLicenses": true,
+                    "inspect": false,
+                    "generatePackageJson": true,
+                    "fileReplacements": [
+                        {
+                            "replace": "apps/api/src/environments/environment.ts",
+                            "with": "apps/api/src/environments/environment.prod.ts"
+                        }
+                    ]
+                }
+            }
+        },
+        "serve": {
+            "executor": "@nx/js:node",
+            "options": {
+                "buildTarget": "api:build",
+                "runtimeArgs": ["--experimental-require-module"]
+            }
+        },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "apps/api",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        },
+        "test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/apps/api"],
+            "options": {
+                "jestConfig": "apps/api/jest.config.js",
+                "passWithNoTests": true
+            }
+        },
+        "format:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "apps/api",
+                "commands": [
+                    {
+                        "command": "npx prettier -c .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        }
+    }
+}

@@ -1,0 +1,1642 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Portfolio Visibility Dashboard</title>
+        <style>
+            :root {
+                --primary: #1a2744;
+                --primary-light: #2a3f6a;
+                --primary-lighter: #3a5590;
+                --accent: #4a7cff;
+                --accent-light: #e8eeff;
+                --bg: #f4f6f9;
+                --card-bg: #ffffff;
+                --border: #dfe3ea;
+                --text: #1a2744;
+                --text-secondary: #5a6a80;
+                --green: #22a06b;
+                --green-bg: #e3fcef;
+                --amber: #e5890a;
+                --amber-bg: #fff7e6;
+                --red: #de350b;
+                --red-bg: #ffebe6;
+                --grey: #8993a4;
+                --grey-bg: #f0f1f4;
+                --shadow: 0 1px 3px rgba(26, 39, 68, 0.08), 0 1px 2px rgba(26, 39, 68, 0.06);
+                --shadow-lg: 0 4px 16px rgba(26, 39, 68, 0.12);
+                --radius: 8px;
+                --radius-lg: 12px;
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+                    sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                line-height: 1.5;
+            }
+
+            /* -- Top Navigation -- */
+            .topnav {
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                display: flex;
+                align-items: center;
+                height: 56px;
+                background: var(--primary);
+                padding: 0 20px;
+                color: #fff;
+            }
+            .topnav-logo {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-weight: 700;
+                font-size: 15px;
+                white-space: nowrap;
+            }
+            .topnav-logo span {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                background: var(--accent);
+                border-radius: 6px;
+                font-weight: 800;
+                font-size: 14px;
+            }
+            .topnav-badges {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-left: 24px;
+            }
+            .badge-env {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                background: rgba(255, 255, 255, 0.12);
+                padding: 3px 10px;
+                border-radius: 4px;
+            }
+            .badge-live {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            .pulse-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--green);
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0%,
+                100% {
+                    box-shadow: 0 0 0 0 rgba(34, 160, 107, 0.5);
+                }
+                50% {
+                    box-shadow: 0 0 0 6px rgba(34, 160, 107, 0);
+                }
+            }
+            .topnav-links {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-left: auto;
+            }
+            .topnav-links a {
+                color: rgba(255, 255, 255, 0.7);
+                text-decoration: none;
+                font-size: 13px;
+                font-weight: 500;
+                padding: 6px 14px;
+                border-radius: 6px;
+                transition: all 0.15s;
+                cursor: pointer;
+            }
+            .topnav-links a:hover {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.08);
+            }
+            .topnav-links a.active {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.14);
+            }
+            .avatar {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: var(--accent);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: 700;
+                color: #fff;
+                cursor: pointer;
+                margin-left: 8px;
+            }
+
+            /* ===================== PORTFOLIO VIEW STYLES ===================== */
+            .layout {
+                display: flex;
+                min-height: calc(100vh - 56px);
+            }
+
+            .sidebar {
+                width: 260px;
+                min-width: 260px;
+                background: var(--card-bg);
+                border-right: 1px solid var(--border);
+                transition:
+                    width 0.25s ease,
+                    min-width 0.25s ease;
+                overflow-y: auto;
+                overflow-x: hidden;
+            }
+            .sidebar.collapsed {
+                width: 48px;
+                min-width: 48px;
+            }
+            .sidebar-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 16px 16px 12px;
+                border-bottom: 1px solid var(--border);
+            }
+            .sidebar-header h3 {
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                color: var(--text-secondary);
+                font-weight: 700;
+                white-space: nowrap;
+            }
+            .sidebar.collapsed .sidebar-header h3 {
+                display: none;
+            }
+            .sidebar-toggle {
+                width: 28px;
+                height: 28px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--card-bg);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-secondary);
+                flex-shrink: 0;
+                transition: all 0.15s;
+            }
+            .sidebar-toggle:hover {
+                background: var(--bg);
+                color: var(--text);
+            }
+            .sidebar-toggle svg {
+                transition: transform 0.25s;
+            }
+            .sidebar.collapsed .sidebar-toggle svg {
+                transform: rotate(180deg);
+            }
+            .sidebar-tree {
+                padding: 8px 0;
+            }
+            .sidebar.collapsed .sidebar-tree {
+                display: none;
+            }
+
+            .tree-item {
+                position: relative;
+            }
+            .tree-row {
+                display: flex;
+                align-items: center;
+                padding: 6px 12px;
+                cursor: pointer;
+                font-size: 13px;
+                color: var(--text);
+                transition: background 0.1s;
+                white-space: nowrap;
+                gap: 4px;
+                border-left: 3px solid transparent;
+            }
+            .tree-row:hover {
+                background: var(--bg);
+            }
+            .tree-row.active {
+                background: var(--accent-light);
+                border-left-color: var(--accent);
+                font-weight: 600;
+            }
+            .tree-arrow {
+                width: 18px;
+                height: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                transition: transform 0.15s;
+                color: var(--grey);
+            }
+            .tree-arrow.expanded {
+                transform: rotate(90deg);
+            }
+            .tree-arrow.hidden {
+                visibility: hidden;
+            }
+            .tree-status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                margin-right: 4px;
+            }
+            .tree-label {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .tree-children {
+                display: none;
+                position: relative;
+            }
+            .tree-children.open {
+                display: block;
+            }
+            .tree-children .tree-row {
+                padding-left: 28px;
+            }
+            .tree-children .tree-children .tree-row {
+                padding-left: 44px;
+            }
+            .tree-children .tree-children .tree-children .tree-row {
+                padding-left: 60px;
+            }
+
+            .tree-children::before {
+                content: '';
+                position: absolute;
+                left: 22px;
+                top: 0;
+                bottom: 12px;
+                width: 1px;
+                background: var(--border);
+            }
+            .tree-children .tree-children::before {
+                left: 38px;
+            }
+            .tree-children .tree-children .tree-children::before {
+                left: 54px;
+            }
+
+            .pf-main {
+                flex: 1;
+                padding: 24px 32px;
+                overflow-y: auto;
+                min-width: 0;
+            }
+
+            .breadcrumb {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+            }
+            .breadcrumb-item {
+                color: var(--accent);
+                cursor: pointer;
+                font-weight: 500;
+            }
+            .breadcrumb-item:hover {
+                text-decoration: underline;
+            }
+            .breadcrumb-item.current {
+                color: var(--text);
+                cursor: default;
+                font-weight: 600;
+            }
+            .breadcrumb-item.current:hover {
+                text-decoration: none;
+            }
+            .breadcrumb-sep {
+                color: var(--grey);
+                font-size: 12px;
+            }
+
+            .pf-summary-bar {
+                display: flex;
+                gap: 16px;
+                margin-bottom: 28px;
+                flex-wrap: wrap;
+            }
+            .pf-summary-stat {
+                background: var(--card-bg);
+                padding: 16px 24px;
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+                display: flex;
+                flex-direction: column;
+                min-width: 160px;
+                flex: 1;
+            }
+            .pf-summary-stat .label {
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                color: var(--text-secondary);
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+            .pf-summary-stat .value {
+                font-size: 26px;
+                font-weight: 700;
+                color: var(--text);
+                line-height: 1.1;
+            }
+            .pf-summary-stat .value.green {
+                color: var(--green);
+            }
+            .pf-summary-stat .value.amber {
+                color: var(--amber);
+            }
+            .pf-summary-stat .value.red {
+                color: var(--red);
+            }
+            .pf-summary-stat .breakdown {
+                display: flex;
+                gap: 10px;
+                margin-top: 8px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            .pf-summary-stat .breakdown .g {
+                color: var(--green);
+            }
+            .pf-summary-stat .breakdown .a {
+                color: var(--amber);
+            }
+            .pf-summary-stat .breakdown .r {
+                color: var(--red);
+            }
+
+            .section-title {
+                font-size: 16px;
+                font-weight: 700;
+                margin-bottom: 16px;
+                color: var(--text);
+            }
+
+            .status-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                display: inline-block;
+            }
+            .status-dot.green {
+                background: var(--green);
+            }
+            .status-dot.amber {
+                background: var(--amber);
+            }
+            .status-dot.red {
+                background: var(--red);
+            }
+
+            .app-table {
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 0;
+                background: var(--card-bg);
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+                overflow: hidden;
+                margin-bottom: 16px;
+                font-size: 13px;
+            }
+            .app-table thead th {
+                background: var(--bg);
+                padding: 10px 16px;
+                text-align: left;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                color: var(--text-secondary);
+                font-weight: 700;
+                border-bottom: 1px solid var(--border);
+            }
+            .app-table tbody tr {
+                cursor: pointer;
+                transition: background 0.1s;
+            }
+            .app-table tbody tr:hover {
+                background: var(--accent-light);
+            }
+            .app-table tbody tr.selected {
+                background: var(--accent-light);
+            }
+            .app-table tbody tr:nth-child(even) {
+                background: #f9fafb;
+            }
+            .app-table tbody tr:nth-child(even):hover {
+                background: var(--accent-light);
+            }
+            .app-table td {
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--border);
+            }
+            .app-table td:first-child {
+                font-weight: 600;
+            }
+            .app-table .status-cell {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-weight: 600;
+                font-size: 12px;
+                text-transform: uppercase;
+            }
+
+            .subpf-section {
+                margin-bottom: 16px;
+                background: var(--card-bg);
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+                overflow: hidden;
+            }
+            .subpf-header {
+                display: flex;
+                align-items: center;
+                padding: 14px 20px;
+                cursor: pointer;
+                user-select: none;
+                transition: background 0.1s;
+                gap: 10px;
+            }
+            .subpf-header:hover {
+                background: var(--bg);
+            }
+            .subpf-arrow {
+                width: 18px;
+                height: 18px;
+                color: var(--grey);
+                flex-shrink: 0;
+                transition: transform 0.15s;
+            }
+            .subpf-arrow.expanded {
+                transform: rotate(90deg);
+            }
+            .subpf-name {
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .subpf-owner {
+                font-size: 12px;
+                color: var(--text-secondary);
+                margin-left: 4px;
+            }
+            .subpf-body {
+                display: none;
+                padding: 0 20px 20px;
+            }
+            .subpf-body.open {
+                display: block;
+            }
+            .subpf-status-row {
+                display: flex;
+                gap: 24px;
+                margin-bottom: 14px;
+                flex-wrap: wrap;
+            }
+            .subpf-status-block {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                font-size: 13px;
+            }
+            .subpf-status-label {
+                font-weight: 700;
+                font-size: 12px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                min-width: 130px;
+            }
+            .status-count {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-weight: 600;
+            }
+            .status-count.green {
+                color: var(--green);
+            }
+            .status-count.amber {
+                color: var(--amber);
+            }
+            .status-count.red {
+                color: var(--red);
+            }
+
+            .subpf-section .subpf-section {
+                margin: 12px 0;
+                box-shadow: none;
+                border: 1px solid var(--border);
+            }
+
+            .view-container {
+                animation: fadeIn 0.25s ease;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .pf-modal-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(26, 39, 68, 0.35);
+                z-index: 200;
+                align-items: center;
+                justify-content: center;
+            }
+            .pf-modal-overlay.open {
+                display: flex;
+            }
+            .pf-modal {
+                background: var(--card-bg);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--shadow-lg);
+                padding: 28px 32px;
+                max-width: 440px;
+                width: 90%;
+                animation: fadeIn 0.2s ease;
+            }
+            .pf-modal h3 {
+                font-size: 18px;
+                font-weight: 700;
+                margin-bottom: 16px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .pf-modal-close {
+                margin-left: auto;
+                background: none;
+                border: none;
+                font-size: 20px;
+                cursor: pointer;
+                color: var(--grey);
+                padding: 4px;
+            }
+            .pf-modal-close:hover {
+                color: var(--text);
+            }
+            .pf-modal-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 8px 0;
+                border-bottom: 1px solid var(--border);
+                font-size: 13px;
+            }
+            .pf-modal-row:last-child {
+                border-bottom: none;
+            }
+            .pf-modal-row .ml {
+                color: var(--text-secondary);
+            }
+            .pf-modal-row .mv {
+                font-weight: 600;
+            }
+
+            /* Responsive */
+            @media (max-width: 800px) {
+                .sidebar {
+                    position: fixed;
+                    left: 0;
+                    top: 56px;
+                    bottom: 0;
+                    z-index: 90;
+                }
+                .sidebar.collapsed {
+                    width: 0;
+                    min-width: 0;
+                    border: none;
+                }
+                .pf-summary-bar {
+                    flex-direction: column;
+                }
+                .pf-main {
+                    padding: 16px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Top Nav -->
+        <nav class="topnav">
+            <div class="topnav-logo">
+                <span>IT</span>
+                Portfolio Visibility Dashboard
+            </div>
+            <div class="topnav-badges">
+                <div class="badge-env">PRODUCTION</div>
+                <div class="badge-live"><span class="pulse-dot"></span> Live</div>
+            </div>
+            <div class="topnav-links">
+                <a class="active">Portfolio</a>
+                <div class="avatar">JD</div>
+            </div>
+        </nav>
+
+        <div class="layout">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h3>Portfolio Tree</h3>
+                    <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">
+                        <svg
+                            width="14"
+                            height="14"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        >
+                            <path d="M9 2L4 7l5 5" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="sidebar-tree" id="sidebarTree"></div>
+            </aside>
+
+            <!-- Main Content -->
+            <div class="pf-main" id="mainContent"></div>
+        </div>
+
+        <!-- Portfolio Modal -->
+        <div class="pf-modal-overlay" id="pfModalOverlay">
+            <div class="pf-modal" id="pfModalContent"></div>
+        </div>
+
+        <script>
+            /*+==================================================================+
+  |  PORTFOLIO DATA                                                    |
+  |  EDIT THIS SECTION to customize portfolios, apps, and people       |
+  |  Structure: each node has id, name, role, owner, children, apps    |
+  |  Apps: name, health (green/amber/red), perception, uptime,         |
+  |        users, incidents, lastIncident                              |
+  +==================================================================+*/
+            const DATA = {
+                id: 'root',
+                name: 'All Portfolios',
+                role: 'COO',
+                owner: 'Rami Assaad',
+                children: [
+                    {
+                        id: 'bu1',
+                        name: 'Health',
+                        role: 'Delivery Lead',
+                        owner: 'Jorie Blackwell',
+                        children: [
+                            {
+                                id: 'bu1-ea',
+                                name: 'US Consulting',
+                                role: 'TPM',
+                                owner: 'Anton Novikov',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Mercer FIBER',
+                                        health: 'green',
+                                        perception: 'amber',
+                                        uptime: 99.88,
+                                        users: 310,
+                                        incidents: 1,
+                                        lastIncident: '12 days ago',
+                                    },
+                                    {
+                                        name: 'Mercer Beacon',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.92,
+                                        users: 150,
+                                        incidents: 0,
+                                        lastIncident: '45 days ago',
+                                    },
+                                    {
+                                        name: 'Mercer Intellify',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 14500,
+                                        incidents: 0,
+                                        lastIncident: '9 days ago',
+                                    },
+                                    {
+                                        name: 'Mercer VIP',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.88,
+                                        users: 680,
+                                        incidents: 0,
+                                        lastIncident: '22 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu1-cs',
+                                name: 'Gov Health',
+                                role: 'TPM',
+                                owner: 'Eric Wolf',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'CRM Suite',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.96,
+                                        users: 2100,
+                                        incidents: 0,
+                                        lastIncident: '18 days ago',
+                                    },
+                                    {
+                                        name: 'Customer Portal',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 14500,
+                                        incidents: 0,
+                                        lastIncident: '9 days ago',
+                                    },
+                                    {
+                                        name: 'Support Ticketing',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.88,
+                                        users: 680,
+                                        incidents: 0,
+                                        lastIncident: '22 days ago',
+                                    },
+                                    {
+                                        name: 'Email Marketing',
+                                        health: 'amber',
+                                        perception: 'amber',
+                                        uptime: 99.3,
+                                        users: 340,
+                                        incidents: 2,
+                                        lastIncident: '3 days ago',
+                                    },
+                                    {
+                                        name: 'Chat Bot',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.94,
+                                        users: 8200,
+                                        incidents: 0,
+                                        lastIncident: '28 days ago',
+                                    },
+                                    {
+                                        name: 'Feedback Collector',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 4500,
+                                        incidents: 0,
+                                        lastIncident: '60 days ago',
+                                    },
+                                    {
+                                        name: 'Loyalty Platform',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.87,
+                                        users: 9300,
+                                        incidents: 0,
+                                        lastIncident: '15 days ago',
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        id: 'bu2',
+                        name: 'Wealth',
+                        role: 'VP',
+                        owner: 'James Wilson',
+                        children: [
+                            {
+                                id: 'bu2-infra',
+                                name: 'OCIO',
+                                role: 'Director',
+                                owner: 'Tom Brown',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Cloud Manager',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.98,
+                                        users: 120,
+                                        incidents: 0,
+                                        lastIncident: '35 days ago',
+                                    },
+                                    {
+                                        name: 'DNS Services',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.999,
+                                        users: 50,
+                                        incidents: 0,
+                                        lastIncident: '120 days ago',
+                                    },
+                                    {
+                                        name: 'Load Balancer',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.97,
+                                        users: 35,
+                                        incidents: 0,
+                                        lastIncident: '60 days ago',
+                                    },
+                                    {
+                                        name: 'Kubernetes Cluster',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.95,
+                                        users: 90,
+                                        incidents: 0,
+                                        lastIncident: '14 days ago',
+                                    },
+                                    {
+                                        name: 'CI/CD Pipeline',
+                                        health: 'amber',
+                                        perception: 'amber',
+                                        uptime: 99.1,
+                                        users: 210,
+                                        incidents: 1,
+                                        lastIncident: '5 days ago',
+                                    },
+                                    {
+                                        name: 'Container Registry',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 180,
+                                        incidents: 0,
+                                        lastIncident: '45 days ago',
+                                    },
+                                    {
+                                        name: 'Secrets Vault',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.999,
+                                        users: 75,
+                                        incidents: 0,
+                                        lastIncident: '90 days ago',
+                                    },
+                                    {
+                                        name: 'Monitoring Stack',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.96,
+                                        users: 140,
+                                        incidents: 0,
+                                        lastIncident: '20 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu2-ds',
+                                name: 'Advisory',
+                                role: 'Director',
+                                owner: 'Amy Lee',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Web CMS',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.93,
+                                        users: 520,
+                                        incidents: 0,
+                                        lastIncident: '25 days ago',
+                                    },
+                                    {
+                                        name: 'Mobile Backend',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.89,
+                                        users: 45000,
+                                        incidents: 0,
+                                        lastIncident: '10 days ago',
+                                    },
+                                    {
+                                        name: 'Push Notifications',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.97,
+                                        users: 38000,
+                                        incidents: 0,
+                                        lastIncident: '30 days ago',
+                                    },
+                                    {
+                                        name: 'CDN Service',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 150,
+                                        incidents: 0,
+                                        lastIncident: '55 days ago',
+                                    },
+                                    {
+                                        name: 'Search Engine',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 22000,
+                                        incidents: 0,
+                                        lastIncident: '8 days ago',
+                                    },
+                                    {
+                                        name: 'Recommendation API',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.85,
+                                        users: 18000,
+                                        incidents: 0,
+                                        lastIncident: '12 days ago',
+                                    },
+                                    {
+                                        name: 'A/B Testing',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.94,
+                                        users: 300,
+                                        incidents: 0,
+                                        lastIncident: '40 days ago',
+                                    },
+                                    {
+                                        name: 'Feature Flags',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.98,
+                                        users: 250,
+                                        incidents: 0,
+                                        lastIncident: '50 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu3-ret',
+                                name: 'Retirement',
+                                role: 'Director',
+                                owner: 'John Doe',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Retirement Studo',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 131,
+                                        incidents: 0,
+                                        lastIncident: '180 days ago',
+                                    },
+                                    {
+                                        name: 'Retiree App',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 22000,
+                                        incidents: 0,
+                                        lastIncident: '260 days ago',
+                                    },
+                                ],
+                            },
+                        ],
+                        apps: [],
+                    },
+                    {
+                        id: 'bu4',
+                        name: 'Career',
+                        role: 'VP',
+                        owner: 'James Wilson',
+                        children: [
+                            {
+                                id: 'bu4-rwds',
+                                name: 'Rewards',
+                                role: 'Director',
+                                owner: 'Tom Brown',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Your Rewards',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.98,
+                                        users: 120,
+                                        incidents: 0,
+                                        lastIncident: '35 days ago',
+                                    },
+                                    {
+                                        name: 'Benefits Manager',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.999,
+                                        users: 50,
+                                        incidents: 0,
+                                        lastIncident: '120 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu4-mobility',
+                                name: 'Mobility',
+                                role: 'Director',
+                                owner: 'Amy Lee',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Mobile Backend',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.89,
+                                        users: 45000,
+                                        incidents: 0,
+                                        lastIncident: '10 days ago',
+                                    },
+                                    {
+                                        name: 'Push Notifications',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.97,
+                                        users: 38000,
+                                        incidents: 0,
+                                        lastIncident: '30 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu4-talent',
+                                name: 'Talent',
+                                role: 'Director',
+                                owner: 'John Doe',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Retirement Studo',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 131,
+                                        incidents: 0,
+                                        lastIncident: '180 days ago',
+                                    },
+                                    {
+                                        name: 'Retiree App',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 22000,
+                                        incidents: 0,
+                                        lastIncident: '260 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu4-communications',
+                                name: 'Communitcations',
+                                role: 'Director',
+                                owner: 'Mike Bush',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Email Studio',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.98,
+                                        users: 343,
+                                        incidents: 0,
+                                        lastIncident: '98 days ago',
+                                    },
+                                    {
+                                        name: 'Customer Chat',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 22000,
+                                        incidents: 0,
+                                        lastIncident: '260 days ago',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'bu4-content',
+                                name: 'Content and Publications',
+                                role: 'Director',
+                                owner: 'Victoria Smith',
+                                children: [],
+                                apps: [
+                                    {
+                                        name: 'Content Studio',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.99,
+                                        users: 131,
+                                        incidents: 0,
+                                        lastIncident: '156 days ago',
+                                    },
+                                    {
+                                        name: 'PDF Publisher',
+                                        health: 'green',
+                                        perception: 'green',
+                                        uptime: 99.91,
+                                        users: 98,
+                                        incidents: 0,
+                                        lastIncident: '361 days ago',
+                                    },
+                                ],
+                            },
+                        ],
+                        apps: [],
+                    },
+                    {
+                        id: 'bu5',
+                        name: 'Enterprise and Corporate',
+                        role: 'VP',
+                        owner: 'Maria Garcia',
+                        children: [],
+                        apps: [
+                            {
+                                name: 'Service Now',
+                                health: 'red',
+                                perception: 'red',
+                                uptime: 96.8,
+                                users: 28000,
+                                incidents: 3,
+                                lastIncident: '45 min ago',
+                            },
+                            {
+                                name: 'Workday',
+                                health: 'amber',
+                                perception: 'amber',
+                                uptime: 99.2,
+                                users: 3200,
+                                incidents: 0,
+                                lastIncident: '1 day ago',
+                            },
+                            {
+                                name: 'Sharepoint',
+                                health: 'green',
+                                perception: 'green',
+                                uptime: 99.87,
+                                users: 890,
+                                incidents: 0,
+                                lastIncident: '18 days ago',
+                            },
+                            {
+                                name: 'MS Teams',
+                                health: 'green',
+                                perception: 'green',
+                                uptime: 99.93,
+                                users: 15000,
+                                incidents: 0,
+                                lastIncident: '22 days ago',
+                            },
+                        ],
+                    },
+                ],
+                apps: [],
+            };
+            /* =============== END OF PORTFOLIO DATA =============== */
+
+            /* =====================================================================
+   PORTFOLIO VIEW LOGIC
+   ===================================================================== */
+
+            // -- Helpers --
+            function getAllApps(node) {
+                let apps = [...(node.apps || [])];
+                (node.children || []).forEach((c) => {
+                    apps = apps.concat(getAllApps(c));
+                });
+                return apps;
+            }
+
+            function countByStatus(apps, field) {
+                const g = apps.filter((a) => a[field] === 'green').length;
+                const a = apps.filter((a) => a[field] === 'amber').length;
+                const r = apps.filter((a) => a[field] === 'red').length;
+                return { green: g, amber: a, red: r };
+            }
+
+            function worstStatus(apps) {
+                const h = countByStatus(apps, 'health');
+                if (h.red > 0) return 'red';
+                if (h.amber > 0) return 'amber';
+                return 'green';
+            }
+
+            function totalIncidents(apps) {
+                return apps.reduce((s, a) => s + a.incidents, 0);
+            }
+
+            function findNode(id, node) {
+                if (node.id === id) return node;
+                for (const c of node.children || []) {
+                    const found = findNode(id, c);
+                    if (found) return found;
+                }
+                return null;
+            }
+
+            function getPath(id, node, path) {
+                path = path || [];
+                if (node.id === id) return [...path, node];
+                for (const c of node.children || []) {
+                    const found = getPath(id, c, [...path, node]);
+                    if (found) return found;
+                }
+                return null;
+            }
+
+            function statusColor(s) {
+                return s === 'red' ? 'var(--red)' : s === 'amber' ? 'var(--amber)' : 'var(--green)';
+            }
+
+            function perceptionLabel(s) {
+                if (s === 'red') return 'CRITICAL';
+                if (s === 'amber') return 'AMBER';
+                return 'GREEN';
+            }
+
+            function healthLabel(s) {
+                if (s === 'red') return 'RED';
+                if (s === 'amber') return 'AMBER';
+                return 'GREEN';
+            }
+
+            // -- State --
+            let currentNodeId = 'root';
+            let expandedTreeNodes = new Set(['root', 'bu1', 'bu2', 'bu1-ea']);
+            let expandedSections = new Set();
+
+            // -- Sidebar Tree --
+            function renderTree() {
+                const container = document.getElementById('sidebarTree');
+                container.innerHTML = buildTreeHTML(DATA, 0);
+                container.querySelectorAll('.tree-arrow-btn').forEach((btn) => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const id = btn.dataset.id;
+                        if (expandedTreeNodes.has(id)) expandedTreeNodes.delete(id);
+                        else expandedTreeNodes.add(id);
+                        renderTree();
+                    });
+                });
+                container.querySelectorAll('.tree-row').forEach((row) => {
+                    row.addEventListener('click', () => {
+                        currentNodeId = row.dataset.id;
+                        if (!expandedTreeNodes.has(currentNodeId))
+                            expandedTreeNodes.add(currentNodeId);
+                        renderTree();
+                        renderMain();
+                    });
+                });
+            }
+
+            function buildTreeHTML(node, depth) {
+                const hasChildren = node.children && node.children.length > 0;
+                const isExpanded = expandedTreeNodes.has(node.id);
+                const isActive = node.id === currentNodeId;
+                const allApps = getAllApps(node);
+                const ws = worstStatus(allApps.length ? allApps : node.apps || []);
+                let html = '<div class="tree-item">';
+                html +=
+                    '<div class="tree-row' +
+                    (isActive ? ' active' : '') +
+                    '" data-id="' +
+                    node.id +
+                    '">';
+                html +=
+                    '<span class="tree-arrow' +
+                    (hasChildren ? (isExpanded ? ' expanded' : '') : ' hidden') +
+                    ' tree-arrow-btn" data-id="' +
+                    node.id +
+                    '">';
+                html +=
+                    '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2l5 5-5 5"/></svg>';
+                html += '</span>';
+                html +=
+                    '<span class="tree-status-dot" style="background:' +
+                    statusColor(ws) +
+                    '"></span>';
+                html += '<span class="tree-label">' + node.name + '</span>';
+                html += '</div>';
+                if (hasChildren) {
+                    html += '<div class="tree-children' + (isExpanded ? ' open' : '') + '">';
+                    node.children.forEach(function (c) {
+                        html += buildTreeHTML(c, depth + 1);
+                    });
+                    html += '</div>';
+                }
+                html += '</div>';
+                return html;
+            }
+
+            // -- Application Table HTML --
+            function buildAppTableHTML(apps) {
+                if (!apps || apps.length === 0) return '';
+                let html = '<table class="app-table"><thead><tr>';
+                html +=
+                    '<th>Application</th><th>Health</th><th>Perception</th><th>Uptime</th><th>Users</th><th>Incidents</th><th>Last Incident</th>';
+                html += '</tr></thead><tbody>';
+                apps.forEach(function (app) {
+                    var uptimeClass =
+                        app.uptime < 99
+                            ? ' style="font-weight:700;color:var(--red)"'
+                            : ' style="font-weight:700"';
+                    var incClass =
+                        app.incidents > 0 ? ' style="color:var(--red);font-weight:700"' : '';
+                    html += '<tr title="Click to view details">';
+                    html += '<td>' + app.name + '</td>';
+                    html +=
+                        '<td><div class="status-cell"><span class="status-dot ' +
+                        app.health +
+                        '"></span><span style="color:' +
+                        statusColor(app.health) +
+                        '">' +
+                        healthLabel(app.health) +
+                        '</span></div></td>';
+                    html +=
+                        '<td><div class="status-cell"><span class="status-dot ' +
+                        app.perception +
+                        '"></span><span style="color:' +
+                        statusColor(app.perception) +
+                        '">' +
+                        perceptionLabel(app.perception) +
+                        '</span></div></td>';
+                    html += '<td' + uptimeClass + '>' + app.uptime + '%</td>';
+                    html += '<td>' + app.users.toLocaleString() + '</td>';
+                    html += '<td' + incClass + '>' + app.incidents + '</td>';
+                    html += '<td>' + app.lastIncident + '</td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                return html;
+            }
+
+            // -- Status counts line --
+            function statusCountsHTML(label, counts, isCritical) {
+                var redLabel = isCritical ? 'Critical' : 'Red';
+                var html = '<div class="subpf-status-block">';
+                html += '<span class="subpf-status-label">' + label + ':</span>';
+                html +=
+                    '<span class="status-count green"><span class="status-dot green"></span>' +
+                    counts.green +
+                    ' Green</span>';
+                html +=
+                    '<span class="status-count amber"><span class="status-dot amber"></span>' +
+                    counts.amber +
+                    ' Amber</span>';
+                html +=
+                    '<span class="status-count red"><span class="status-dot red"></span>' +
+                    counts.red +
+                    ' ' +
+                    redLabel +
+                    '</span>';
+                html += '</div>';
+                return html;
+            }
+
+            // -- Build nested sub-portfolio sections --
+            function buildSubPortfolioHTML(node, depth, forceExpanded) {
+                var allApps = getAllApps(node);
+                var directApps = node.apps || [];
+                var hasChildren = node.children && node.children.length > 0;
+                var hCounts = countByStatus(allApps, 'health');
+                var pCounts = countByStatus(allApps, 'perception');
+                var sectionId = 'section-' + node.id;
+                var isOpen = forceExpanded || expandedSections.has(node.id);
+
+                var html = '<div class="subpf-section">';
+                html += '<div class="subpf-header" data-section="' + node.id + '">';
+                html += '<span class="subpf-arrow' + (isOpen ? ' expanded' : '') + '">';
+                html +=
+                    '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2l5 5-5 5"/></svg>';
+                html += '</span>';
+                html += '<span class="subpf-name">' + node.name + '</span>';
+                html += '<span class="subpf-owner">' + node.owner + ' (' + node.role + ')</span>';
+                html += '</div>';
+
+                html +=
+                    '<div class="subpf-body' +
+                    (isOpen ? ' open' : '') +
+                    '" id="' +
+                    sectionId +
+                    '">';
+                html += '<div class="subpf-status-row">';
+                html += statusCountsHTML('Portfolio Status', hCounts, false);
+                html += statusCountsHTML('User Perception', pCounts, true);
+                html += '</div>';
+
+                if (directApps.length > 0) {
+                    html += buildAppTableHTML(directApps);
+                }
+
+                if (hasChildren) {
+                    node.children.forEach(function (child) {
+                        var childExpanded = forceExpanded || false;
+                        html += buildSubPortfolioHTML(child, depth + 1, childExpanded);
+                    });
+                }
+
+                if (directApps.length === 0 && !hasChildren && allApps.length > 0) {
+                    html += buildAppTableHTML(allApps);
+                }
+
+                html += '</div>';
+                html += '</div>';
+                return html;
+            }
+
+            // -- Main Content Rendering --
+            function renderMain() {
+                var node = findNode(currentNodeId, DATA);
+                var path = getPath(currentNodeId, DATA);
+                var container = document.getElementById('mainContent');
+                var allApps = getAllApps(node);
+                var directApps = node.apps || [];
+                var hasChildren = node.children && node.children.length > 0;
+                var isRoot = currentNodeId === 'root';
+
+                expandedSections = new Set();
+                if (isRoot) {
+                    function expandAll(n) {
+                        expandedSections.add(n.id);
+                        (n.children || []).forEach(expandAll);
+                    }
+                    (node.children || []).forEach(expandAll);
+                } else {
+                    (node.children || []).forEach(function (c) {
+                        expandedSections.add(c.id);
+                    });
+                }
+
+                var html = '<div class="view-container">';
+
+                // Breadcrumb
+                html += '<div class="breadcrumb">';
+                path.forEach(function (p, i) {
+                    if (i > 0) html += '<span class="breadcrumb-sep">&gt;</span>';
+                    if (i === path.length - 1) {
+                        html += '<span class="breadcrumb-item current">' + p.name + '</span>';
+                    } else {
+                        html +=
+                            '<span class="breadcrumb-item" data-nav="' +
+                            p.id +
+                            '">' +
+                            p.name +
+                            '</span>';
+                    }
+                });
+                html += '</div>';
+
+                // Summary Bar
+                var h = countByStatus(allApps, 'health');
+                var p = countByStatus(allApps, 'perception');
+                var inc = totalIncidents(allApps);
+
+                html += '<div class="pf-summary-bar">';
+                html += '<div class="pf-summary-stat">';
+                html += '<span class="label">Total Applications</span>';
+                html += '<span class="value">' + allApps.length + '</span>';
+                html += '</div>';
+                html += '<div class="pf-summary-stat">';
+                html += '<span class="label">Portfolio Status</span>';
+                html +=
+                    '<div class="breakdown"><span class="g">' +
+                    h.green +
+                    ' Green</span> <span class="a">' +
+                    h.amber +
+                    ' Amber</span> <span class="r">' +
+                    h.red +
+                    ' Red</span></div>';
+                html += '</div>';
+                html += '<div class="pf-summary-stat">';
+                html += '<span class="label">User Perception</span>';
+                html +=
+                    '<div class="breakdown"><span class="g">' +
+                    p.green +
+                    ' Green</span> <span class="a">' +
+                    p.amber +
+                    ' Amber</span> <span class="r">' +
+                    p.red +
+                    ' Critical</span></div>';
+                html += '</div>';
+                html += '<div class="pf-summary-stat">';
+                html += '<span class="label">Active Incidents</span>';
+                html += '<span class="value' + (inc > 0 ? ' red' : '') + '">' + inc + '</span>';
+                html += '</div>';
+                html += '</div>';
+
+                // Sub-portfolio expandable sections
+                if (hasChildren) {
+                    node.children.forEach(function (child) {
+                        var childExpanded = isRoot;
+                        html += buildSubPortfolioHTML(child, 0, childExpanded);
+                    });
+                }
+
+                // Direct apps on current node
+                if (directApps.length > 0) {
+                    html +=
+                        '<h2 class="section-title">Applications' +
+                        (hasChildren ? ' (directly assigned)' : '') +
+                        '</h2>';
+                    html += buildAppTableHTML(directApps);
+                }
+
+                if (!hasChildren && directApps.length === 0 && allApps.length > 0) {
+                    html += '<h2 class="section-title">Applications</h2>';
+                    html += buildAppTableHTML(allApps);
+                }
+
+                html += '</div>';
+                container.innerHTML = html;
+
+                bindMainEvents(container);
+            }
+
+            function bindMainEvents(container) {
+                container.querySelectorAll('.breadcrumb-item:not(.current)').forEach(function (el) {
+                    el.addEventListener('click', function () {
+                        currentNodeId = el.dataset.nav;
+                        if (!expandedTreeNodes.has(currentNodeId))
+                            expandedTreeNodes.add(currentNodeId);
+                        renderTree();
+                        renderMain();
+                    });
+                });
+
+                container.querySelectorAll('.subpf-header').forEach(function (header) {
+                    header.addEventListener('click', function () {
+                        var sectionId = header.dataset.section;
+                        var body = document.getElementById('section-' + sectionId);
+                        var arrow = header.querySelector('.subpf-arrow');
+                        if (body.classList.contains('open')) {
+                            body.classList.remove('open');
+                            arrow.classList.remove('expanded');
+                            expandedSections.delete(sectionId);
+                        } else {
+                            body.classList.add('open');
+                            arrow.classList.add('expanded');
+                            expandedSections.add(sectionId);
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.app-table tbody tr').forEach(function (row) {
+                    row.addEventListener('click', function () {
+                        window.open('detail.html', '_blank');
+                    });
+                });
+            }
+
+            // -- Sidebar Toggle --
+            document.getElementById('sidebarToggle').addEventListener('click', function () {
+                document.getElementById('sidebar').classList.toggle('collapsed');
+            });
+
+            /* =====================================================================
+   INIT
+   ===================================================================== */
+            renderTree();
+            renderMain();
+        </script>
+    </body>
+</html>

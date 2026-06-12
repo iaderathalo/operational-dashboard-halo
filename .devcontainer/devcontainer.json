@@ -1,0 +1,40 @@
+// For format details, see https://aka.ms/devcontainer.json. For an example, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.183.0/containers/javascript-node-mongo
+{
+    "name": "operational-dashboard",
+    "dockerComposeFile": "./docker-compose.local.yml",
+    "service": "local-dev",
+    "workspaceFolder": "/home/build/app",
+
+    // Set *default* container specific settings.json values on container create.
+    // "settings": {},
+
+    // Add the IDs of extensions you want installed when the container is created.
+    "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "mongodb.mongodb-vscode",
+        "ms-mssql.mssql",
+        "github.vscode-pull-request-github",
+        "bierner.markdown-preview-github-styles",
+        "bierner.markdown-checkbox",
+        "formulahendry.code-runner",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker",
+        "streetsidesoftware.code-spell-checker",
+        "yzhang.markdown-all-in-one",
+        "firsttris.vscode-jest-runner",
+        "gruntfuggly.todo-tree",
+        "ms-toolsai.jupyter",
+        "ms-python.python"
+    ],
+
+    // Use 'forwardPorts' to make a list of ports inside the container available locally.
+    "forwardPorts": [4200, 4201, 4202, 8080, 27017, 1433, 8085],
+
+    // Use 'postCreateCommand' to run commands after the container is created, e.g.
+    // "postCreateCommand": "code --install-extension mongodb.mongodb-vscode",
+
+    // Don't connect as root. More info: https://aka.ms/vscode-remote/containers/non-root.
+    "remoteUser": "build"
+}

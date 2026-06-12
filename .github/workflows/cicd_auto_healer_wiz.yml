@@ -1,0 +1,231 @@
+name: Agentic UP — Automatic Fix for WIZ Vulnerabilities
+on:
+  workflow_dispatch:
+    inputs:
+      deployToDev:
+        description: 'Deploy To Development Environment'
+        required: true
+        type: boolean
+        default: true
+      imageScan:
+        description: 'SecOps Image Scan'
+        required: true
+        type: boolean
+        default: false
+      configRepo:
+        description: 'Config Repo Branch :'
+        required: false
+        type: string
+        default: master
+      wizHealer:
+        description: 'Agentic UP — Automatic Fix for WIZ Vulnerabilities'
+        required: false
+        type: boolean
+        default: true
+      baseBranch:
+        description: 'Base Branch for PR Creation (will be used by UP only)'
+        required: false
+        type: string
+        default: ''
+      runner_choice:
+        description: 'Runner Choice'
+        required: false
+        type: choice
+        options:
+          - mmc-arc-emea
+          - mmc-ubuntu
+        default: mmc-arc-emea
+run-name:
+  ${{ github.event_name=='workflow_dispatch' && format('Manual trigger') || github.event_name  }} on
+  ${{ github.ref_name }}@${{ github.event.client_payload.commit_sha ||
+  github.event.head_commit.message || inputs.environment || ( inputs.deployToDev == true  ||
+  github.ref_name == 'main' ) &&  format('Dev deploy') || ( inputs.imageScan == true &&
+  format('build, test and sysdig') ) || format('build and test') }}
+env:
+  PROJECT_NAME: ${{ github.event.repository.name }}
+  REGISTRY: submissions.mgti-dal-so-art.mrshmc.com
+  IMAGE_SUBMITTER: ${{ github.event.sender.login }}
+
+jobs:
+  build_test:
+    name: Build and test
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/buildtest.yaml@v2.3
+    with:
+      config_branch: ${{ inputs.configRepo }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # SecOps scan for Snyk, GitGuardian and Sonar.
+  secops_code:
+    name: Secops code scan
+    needs: [build_test]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/secops_code.yaml@v2.3
+    with:
+      data: ${{ needs.build_test.outputs.data }}
+      deploy_env: ${{ needs.build_test.outputs.deploy_env }}
+      release_name: ${{ needs.build_test.outputs.release_name }}
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Prepare Image for mono repo apps
+  prepareAndTestImage:
+    name: Prepare and Scan Image for ${{ matrix.images.image-name }}
+    if:
+      ${{  inputs.deployToDev || ( github.ref_name == 'main' || github.ref_name == 'development' )
+      || inputs.imageScan  }}
+    needs: [build_test]
+    strategy:
+      matrix: ${{fromJson(needs.build_test.outputs.images)}}
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/prepareAndTestImage.yaml@v2.3
+    with:
+      data: ${{ needs.build_test.outputs.data }}
+      deploy_env: ${{ needs.build_test.outputs.deploy_env }}
+      release_name: ${{ needs.build_test.outputs.release_name }}
+      configMaps: ${{ needs.build_test.outputs.configMaps }}
+      apps: ${{ toJSON(matrix.images) }}
+      tag: ${{ needs.build_test.outputs.tag }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Wiz Healer
+  wiz-fixer:
+    name: Agentic UP — Automatic Healer of WIZ Vulnerabilities
+    needs: [build_test, prepareAndTestImage]
+    if: failure() && inputs.wizHealer == true
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/wiz-fixer.yml@v2.3
+    with:
+      apps: ${{ toJson(fromJson(needs.build_test.outputs.images)) }}
+      base_image: ${{  fromJson(needs.build_test.outputs.data).baseImage }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Cleanup Cache
+  Post-Run-Cleanup:
+    if: success() || failure() || always()
+    name: Post Run Cleanup
+    needs: [build_test, prepareAndTestImage]
+    runs-on: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    steps:
+      - name: clean-up job
+        uses: mmctech/mmc-tech-unified-pipeline/utils/cleanup-cache@v2.3
+        with:
+          repoName: ${{ needs.build_test.outputs.release_name }}
+          token: ${{ secrets.DOCOE_MARSH_GH_CHECKOUT_TOKEN }}
+          tag: ${{ needs.build_test.outputs.tag }}
+          runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+  # Deploy DB
+  deploy_db:
+    name: Deploy DB to Dev
+    needs: [prepareAndTestImage, build_test, secops_code]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/deployDB.yaml@v2.3
+    if:
+      ${{ (inputs.deployToDev || ( github.ref_name == 'main' || github.ref_name == 'development'  ))
+      && needs.build_test.outputs.runDatabase=='true'
+      &&  needs.build_test.outputs.dbChangeDetected=='true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.build_test.outputs.database)}}
+    with:
+      db: ${{ toJSON(matrix.database) }}
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      deploy_env: dev
+      config_branch: ${{ inputs.configRepo }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Deploy to development environment
+  deployDEV:
+    if:
+      ${{ needs.prepareAndTestImage.result == 'success' && (!failure() && !cancelled()) &&
+      (inputs.deployToDev || ( github.ref_name == 'main' || github.ref_name == 'development'  )) }}
+    name: Deploy ${{ matrix.apps.name }} to Dev
+    needs: [prepareAndTestImage, build_test, deploy_db, secops_code]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/deploy.yaml@v2.3
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.build_test.outputs.apps)}}
+    with:
+      app: ${{ toJSON(matrix.apps) }}
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      deploy_env: dev
+      config_branch: ${{ inputs.configRepo }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Deploy camunda updaters
+  deploy-updaters:
+    name: Deploy ${{ matrix.updaters.name }} to Dev
+    needs: [prepareAndTestImage, deployDEV, build_test, secops_code]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/deployTests.yaml@v2.3
+    if: ${{ needs.build_test.outputs.runUpdaters=='true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.build_test.outputs.updaters)}}
+    with:
+      test: ${{ toJSON(matrix.updaters) }}
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      deploy_env: dev
+      config_branch: ${{ inputs.configRepo }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  # Deploy E2E test and do integration testing
+  post-deploy-tests:
+    name: Post Deploy tests ${{ matrix.tests.name }} to Dev
+    needs: [deployDEV, prepareAndTestImage, deploy-updaters, build_test, secops_code]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/deployTests.yaml@v2.3
+    if:
+      ${{ needs.prepareAndTestImage.result == 'success' && needs.deployDEV.result == 'success' &&
+      (!failure() && !cancelled()) && needs.build_test.outputs.runTests=='true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.build_test.outputs.tests)}}
+    with:
+      test: ${{ toJSON(matrix.tests) }}
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      deploy_env: dev
+      config_branch: ${{ inputs.configRepo }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  #Create PR for Agentic UP
+  create-pr:
+    name: Create PR after Remediation with Agentic UP
+    if:
+      ${{ inputs.wizHealer == true && inputs.baseBranch !='' && needs.deployDEV.result == 'success'
+      && (!failure() && !cancelled()) }}
+    needs: [build_test, deploy_db, deployDEV, wiz-fixer]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/createPR.yml@v2.3
+    with:
+      baseBranch: ${{ inputs.baseBranch }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit
+
+  post-cicd:
+    name: Post Job Run
+    if: ${{ needs.deployDEV.result == 'success' && (!failure() && !cancelled()) }}
+    needs: [build_test, deploy_db, deployDEV]
+    uses: mmctech/mmc-tech-unified-pipeline/.github/workflows/postCicd.yaml@v2.3
+    with:
+      image_tag: ${{ needs.build_test.outputs.tag }}
+      deploy_config: ${{ needs.build_test.outputs.deployConfig }}
+      release_name: ${{ needs.build_test.outputs.release_name }}
+      non_prod_env_list: ${{ fromJson(needs.build_test.outputs.data).NON_PROD_ENV_LIST }}
+      prod_env_list: ${{ fromJson(needs.build_test.outputs.data).PROD_ENV_LIST }}
+      integration_domain: ${{ fromJson(needs.build_test.outputs.data).INTEGRATION_DOMAIN }}
+      snow_configuration_item:
+        ${{ fromJson(needs.build_test.outputs.data).SNOW_CONFIGURATION_ITEM }}
+      release_upload_flag: ${{ fromJson(needs.build_test.outputs.data).RELEASE_UPLOAD_FLAG }}
+      appShortKey: ${{ fromJson(needs.build_test.outputs.data).appShortKey }}
+      backend_tech_stack: ${{ fromJson(needs.build_test.outputs.data).backendStack }}
+      add_on_component: ${{ fromJson(needs.build_test.outputs.data).addonComponent }}
+      apps: ${{ toJson(fromJson(needs.build_test.outputs.apps)) }}
+      data: ${{ needs.deployDEV.outputs.data }}
+      deploy_env: ${{ needs.build_test.outputs.deploy_env }}
+      deployment_start_time: ${{ needs.build_test.outputs.start_time }}
+      db_scripts: ${{ needs.deploy_db.outputs.dbscripts }}
+      deploydb_destructive: ${{ needs.build_test.outputs.deploydb_destructive }}
+      runner_choice: ${{ inputs.runner_choice || 'mmc-arc-emea' }}
+    secrets: inherit

@@ -1,0 +1,56 @@
+{
+    "name": "api-e2e",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/api-e2e/src",
+    "projectType": "application",
+    "tags": [],
+    "targets": {
+        "build": {
+            "executor": "@nx/webpack:webpack",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/api-e2e",
+                "main": "apps/api-e2e/src/runtime-packages.ts",
+                "tsConfig": "apps/api-e2e/tsconfig.app.json",
+                "webpackConfig": "apps/api-e2e/webpack.config.js",
+                "compiler": "tsc",
+                "target": "node"
+            },
+            "configurations": {
+                "production": {
+                    "optimization": true,
+                    "extractLicenses": true,
+                    "inspect": false,
+                    "generatePackageJson": true,
+                    "fileReplacements": [
+                        {
+                            "replace": "apps/api-e2e/src/environments/environment.ts",
+                            "with": "apps/api-e2e/src/environments/environment.prod.ts"
+                        }
+                    ]
+                }
+            }
+        },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "apps/api",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        },
+        "system-test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/apps/api-e2e"],
+            "options": {
+                "jestConfig": "apps/api-e2e/jest.e2econfig.js",
+                "passWithNoTests": true
+            }
+        }
+    }
+}

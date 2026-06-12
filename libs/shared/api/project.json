@@ -1,0 +1,30 @@
+{
+    "name": "shared-api-model",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "projectType": "library",
+    "sourceRoot": "libs/shared/api/src",
+    "prefix": "operational-dashboard",
+    "tags": [],
+    "targets": {
+        "test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/libs/shared/api"],
+            "options": {
+                "jestConfig": "libs/shared/api/jest.config.js"
+            }
+        },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "libs/shared/api",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        }
+    }
+}

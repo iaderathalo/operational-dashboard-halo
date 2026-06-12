@@ -1,0 +1,32 @@
+{
+    "id": "/dashboard",
+    "name": "Portfolio Visibility Dashboard",
+    "short_name": "Portfolio Visibility",
+    "description": "Portfolio visibility dashboard for monitoring portfolio health, incidents, and application status.",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#f4f6f9",
+    "theme_color": "#0f2148",
+    "icons": [
+        {
+            "src": "/assets/pwa/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/assets/pwa/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/assets/pwa/icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

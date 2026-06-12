@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+    <title>Portfolio Visibility Dashboard maskable icon</title>
+    <desc>Maskable application icon for the Portfolio Visibility Dashboard progressive web app.</desc>
+    <rect width="512" height="512" fill="#0f2148" />
+    <circle cx="256" cy="256" r="184" fill="#17346d" />
+    <circle cx="256" cy="256" r="148" fill="#23478d" />
+    <path d="M184 206h144" stroke="#9db0d6" stroke-width="18" stroke-linecap="round" />
+    <path d="M184 252h112" stroke="#9db0d6" stroke-width="18" stroke-linecap="round" />
+    <path d="M184 298h136" stroke="#9db0d6" stroke-width="18" stroke-linecap="round" />
+    <text x="176" y="354" fill="#ffffff" font-family="Arial, sans-serif" font-size="108" font-weight="700">IT</text>
+    <text x="188" y="404" fill="#d7e3ff" font-family="Arial, sans-serif" font-size="44" font-weight="700">OPS DASH</text>
+</svg>

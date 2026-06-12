@@ -1,0 +1,26 @@
+{
+    "applicationKey": "operational-dashboard",
+    "applicationCode": "operdas1",
+    "polaris-schematic-node-microservice": [
+        {
+            "name": "api",
+            "directory": "",
+            "datastore": "mongodb",
+            "portNumber": "8080",
+            "e2eSuiteName": "api-e2e",
+            "Ai": false
+        }
+    ],
+    "polaris-schematic-ui-angular": [
+        {
+            "name": "ui",
+            "directory": "",
+            "portNumber": "4200",
+            "targetApi": {
+                "name": "api",
+                "portNumber": 8080
+            }
+        }
+    ],
+    "svcAccCreationHandled": true
+}

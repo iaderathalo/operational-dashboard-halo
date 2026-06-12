@@ -1,0 +1,374 @@
+openapi: 3.0.2
+info:
+    title: API API
+    version: '1.0'
+servers:
+    - url: /api/v1
+tags:
+    - name: tasks
+      description: Tasks APIs
+components:
+    securitySchemes:
+        ApiKeyAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+    schemas:
+        errorResponse:
+            type: object
+            properties:
+                type:
+                    type: string
+                    description: A URI reference that identifies the problem type.
+                title:
+                    type: string
+                    description: A short, human-readable summary of the problem type.
+                status:
+                    type: string
+                    description: The HTTP status code.
+                detail:
+                    type: string
+                    description:
+                        A human-readable explanation specific to this occurrence of the problem.
+                instance:
+                    type: string
+                    description:
+                        A URI reference that identifies the specific occurrence of the problem.
+        taskBase:
+            type: object
+            properties:
+                name:
+                    type: string
+                    nullable: false
+                    maxLength: 80
+                    description: The name of the task
+                description:
+                    type: string
+                    maxLength: 500
+                    description: The description of the task
+                priority:
+                    type: integer
+                    minimum: 0
+                    maximum: 1000
+                    nullable: false
+                    description: The priority of the task. Allows sorting of tasks by priority.
+        createTaskRequest:
+            type: object
+            allOf:
+                - $ref: '#/components/schemas/taskBase'
+        task:
+            type: object
+            allOf:
+                - $ref: '#/components/schemas/taskBase'
+            properties:
+                id:
+                    type: string
+                    nullable: true
+        getTasksResponse:
+            type: object
+            properties:
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/task'
+        updateTaskRequest:
+            type: object
+            allOf:
+                - $ref: '#/components/schemas/task'
+        deleteTasksResponse:
+            type: object
+            properties:
+                num_tasks_deleted:
+                    type: integer
+                    description: The number of tasks that were deleted.
+    responses:
+        200_ok:
+            description: The request completed successfully
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        204_ok:
+            description: The request completed successfully, no content returned
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        200_task_details:
+            description: The details of the task
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/task'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        201_create_task_result:
+            description: Contains the ID of the newly created task
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        200_task_list:
+            description: A list of tasks
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/getTasksResponse'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        200_delete_tasks:
+            description: Confirmation of deleted tasks
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/deleteTasksResponse'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        400_bad_request:
+            description: There was an issue with the structure of the request
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+                    examples:
+                        example-1:
+                            $ref: '#/components/examples/error_example'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        401_not_authenticated:
+            description: The requestor is not authenticated
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+                    examples:
+                        example-1:
+                            $ref: '#/components/examples/error_example'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        404_not_found:
+            description: The resource was not found
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+                    examples:
+                        example-1:
+                            $ref: '#/components/examples/error_example'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        5XX_unexpected_error:
+            description: An unexpected error occurred
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+                    examples:
+                        example-1:
+                            $ref: '#/components/examples/error_example'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        503_service_unavailable:
+            description: The service is currently unavailable
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+                    examples:
+                        example-1:
+                            $ref: '#/components/examples/error_example'
+            headers:
+                X-Correlation-ID:
+                    $ref: '#/components/headers/x_correlation_id'
+                X-Api-Version:
+                    $ref: '#/components/headers/x_api_version'
+        errorResponse:
+            description: Error response
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/errorResponse'
+    parameters:
+        task_id:
+            name: task_id
+            in: path
+            required: true
+            description: The ID of the task
+            schema:
+                type: string
+    requestBodies:
+        create_task_request:
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/createTaskRequest'
+        update_task_request:
+            content:
+                application/json; charset=utf-8:
+                    schema:
+                        $ref: '#/components/schemas/updateTaskRequest'
+    examples:
+        error_example:
+            value:
+                type: https://example.com/probs/error
+                title: Error Title
+                detail: Detail of error
+                instance: /path/to/error
+                status: 4XX
+    headers:
+        x_correlation_id:
+            required: false
+            description: Allows correlating the request with activity. Useful for debugging issues.
+            schema:
+                type: string
+                format: uuid
+            allowEmptyValue: false
+        x_api_version:
+            required: false
+            description: Release version number of the module servicing the request.
+            schema:
+                type: string
+            allowEmptyValue: false
+paths:
+    /health:
+        description: For checking the health of the API.
+        get:
+            tags:
+                - health
+            operationId: checkHealth
+            description: Verifies whether the API is in a healthy state.
+            responses:
+                '200':
+                    $ref: '#/components/responses/200_ok'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+    /tasks:
+        description: Task related operations.
+        get:
+            tags:
+                - tasks
+            operationId: getTasks
+            description: Gets a list of the authenticated user's tasks
+            responses:
+                '200':
+                    $ref: '#/components/responses/200_task_list'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+                '503':
+                    $ref: '#/components/responses/503_service_unavailable'
+        post:
+            tags:
+                - tasks
+            operationId: createTask
+            description: Creates a new task. Exclude the task id value when submitting.
+            responses:
+                '201':
+                    $ref: '#/components/responses/201_create_task_result'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+            requestBody:
+                $ref: '#/components/requestBodies/create_task_request'
+        delete:
+            tags:
+                - tasks
+            operationId: deleteAllTasks
+            description: Deletes all tasks
+            responses:
+                '200':
+                    $ref: '#/components/responses/200_delete_tasks'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+    '/tasks/{task_id}':
+        description: Task related operations at the task level
+        parameters:
+            - $ref: '#/components/parameters/task_id'
+        get:
+            tags:
+                - tasks
+            operationId: getTask
+            description: Gets the details of a task
+            responses:
+                '200':
+                    $ref: '#/components/responses/200_task_details'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                '404':
+                    $ref: '#/components/responses/404_not_found'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+        put:
+            tags:
+                - tasks
+            operationId: updateTask
+            description: Updates a task
+            responses:
+                '204':
+                    $ref: '#/components/responses/204_ok'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                '404':
+                    $ref: '#/components/responses/404_not_found'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+            requestBody:
+                $ref: '#/components/requestBodies/update_task_request'
+        delete:
+            tags:
+                - tasks
+            operationId: deleteTask
+            description: Deletes a task
+            responses:
+                '204':
+                    $ref: '#/components/responses/204_ok'
+                '400':
+                    $ref: '#/components/responses/400_bad_request'
+                '401':
+                    $ref: '#/components/responses/401_not_authenticated'
+                '404':
+                    $ref: '#/components/responses/404_not_found'
+                5XX:
+                    $ref: '#/components/responses/5XX_unexpected_error'
+security:
+    - ApiKeyAuth: []

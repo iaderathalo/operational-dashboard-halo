@@ -1,0 +1,337 @@
+@import 'app/app';
+@import 'app/navbar';
+@import 'app/footer';
+
+:host {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #f4f6f9;
+}
+
+#header {
+    flex-shrink: 0;
+    background: #0f2148;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(15, 33, 72, 0.18);
+}
+
+.main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.header-shell {
+    min-height: 72px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.marsh-logo {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+
+    img {
+        display: block;
+        height: 48px;
+        width: auto;
+        filter: brightness(0) invert(1);
+    }
+}
+
+.header-context {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.header-copy {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.header-title {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.header-trail {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #9db0d6;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.header-link {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+        color: #fff;
+        text-decoration: underline;
+    }
+}
+
+.header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.header-profile {
+    position: relative;
+}
+
+.header-profile-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 4px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    &:focus-visible {
+        outline: 2px solid #9db0d6;
+        outline-offset: 2px;
+    }
+}
+
+.header-user-name {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.header-env {
+    font-size: 12px;
+    color: #9db0d6;
+}
+
+.header-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #4a7cff;
+    color: #fff;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.header-avatar-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.header-profile-menu {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: min(300px, calc(100vw - 24px));
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    border: 1px solid rgba(15, 33, 72, 0.08);
+    border-radius: 16px;
+    background: #fff;
+    color: #0f2148;
+    box-shadow: 0 16px 40px rgba(15, 33, 72, 0.18);
+    z-index: 20;
+}
+
+.header-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-profile-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #4a7cff;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.header-profile-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.header-profile-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6d7b9a;
+}
+
+.header-profile-name {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.header-profile-email {
+    font-size: 13px;
+    color: #3b4d73;
+    word-break: break-word;
+}
+
+.header-profile-field {
+    display: grid;
+    gap: 2px;
+}
+
+.header-profile-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6d7b9a;
+}
+
+.header-profile-field-value {
+    font-size: 13px;
+    color: #16284f;
+    word-break: break-word;
+}
+
+@media (max-width: 900px) {
+    .header-shell {
+        min-height: 60px;
+        padding: 10px 16px;
+        gap: 16px;
+    }
+
+    .marsh-logo img {
+        height: 36px;
+    }
+
+    .header-context {
+        gap: 12px;
+    }
+
+    .header-copy {
+        gap: 8px;
+    }
+}
+
+@media (max-width: 640px) {
+    .header-shell {
+        min-height: 54px;
+        padding: 8px 12px;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .header-context {
+        width: auto;
+        flex: 1 1 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .marsh-logo img {
+        height: 30px;
+    }
+
+    .header-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .header-title {
+        font-size: 14px;
+        line-height: 1.1;
+    }
+
+    .header-trail {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        line-height: 1.2;
+    }
+
+    .header-meta {
+        width: auto;
+        gap: 0;
+    }
+
+    .header-env {
+        display: none;
+    }
+
+    .header-user-name {
+        display: none;
+    }
+
+    .header-profile-button {
+        padding-left: 0;
+        background: transparent;
+
+        &:hover {
+            background: transparent;
+        }
+    }
+
+    .header-avatar {
+        width: 30px;
+        height: 30px;
+        font-size: 12px;
+    }
+
+    .header-profile-menu {
+        top: calc(100% + 10px);
+        right: -6px;
+        width: min(280px, calc(100vw - 16px));
+        padding: 14px;
+    }
+}

@@ -1,0 +1,46 @@
+@import 'main.scss';
+
+$menuHeight: 40px;
+
+#header {
+    background:
+        radial-gradient(circle at top left, rgba(74, 124, 255, 0.08), transparent 32%),
+        linear-gradient(180deg, #f7f9fc 0%, #f4f6f9 100%);
+
+    ul {
+        list-style: none;
+        margin: 0;
+        padding: 10px 16px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .marsh-logo {
+        a {
+            padding: 0 8px;
+            font-size: 1.4rem;
+            text-decoration: none;
+            color: #07c;
+            display: flex;
+            align-items: center;
+            height: $menuHeight;
+        }
+
+        img {
+            height: 1.8rem;
+            width: auto;
+            margin-left: 0.25rem;
+        }
+    }
+
+    .burger {
+        display: none;
+    }
+
+    .menu {
+        display: none;
+    }
+}

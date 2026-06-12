@@ -1,0 +1,30 @@
+{
+    "name": "config",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "projectType": "library",
+    "sourceRoot": "libs/shared/config/src",
+    "prefix": "app",
+    "tags": [],
+    "targets": {
+        "test": {
+            "executor": "@nx/jest:jest",
+            "outputs": ["{workspaceRoot}/coverage/libs/shared/config"],
+            "options": {
+                "jestConfig": "libs/shared/config/jest.config.js"
+            }
+        },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "cwd": "libs/shared/config",
+                "commands": [
+                    {
+                        "command": "npx eslint .",
+                        "forwardAllArgs": false
+                    }
+                ],
+                "parallel": false
+            }
+        }
+    }
+}

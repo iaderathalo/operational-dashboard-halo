@@ -1,0 +1,65 @@
+{
+    "images": [
+        {
+            "image-name": "api-e2e",
+            "dockerfile": "./deployments/docker/Dockerfile.api-e2e",
+            "distLocation": "./dist/apps/api-e2e/"
+        },
+        {
+            "image-name": "api",
+            "dockerfile": "./deployments/docker/Dockerfile.api",
+            "distLocation": "./dist/apps/api/"
+        },
+        {
+            "image-name": "db-execution",
+            "dockerfile": "./deployments/docker/Dockerfile.db-execution",
+            "distLocation": "./dist/apps/db-execution/"
+        },
+        {
+            "image-name": "ui",
+            "dockerfile": "./deployments/docker/Dockerfile.ui",
+            "distLocation": "./dist/apps/ui/"
+        }
+    ],
+    "apps": [
+        {
+            "name": "api",
+            "jobs": {
+                "monitor-rollout": true,
+                "monitor-rollout-timeout-mins": 5,
+                "has-serverless": false
+            }
+        },
+        {
+            "name": "ui",
+            "jobs": {
+                "monitor-rollout": true,
+                "monitor-rollout-timeout-mins": 5,
+                "has-serverless": false
+            }
+        }
+    ],
+    "updaters": [],
+    "tests": [
+        {
+            "name": "api-e2e",
+            "jobs": {
+                "monitor-rollout": false,
+                "preemptive-delete": true,
+                "delete-job": true
+            }
+        }
+    ],
+    "database": [
+        {
+            "name": "db-execution",
+            "deploydb": false,
+            "jobs": {
+                "monitor-rollout": true,
+                "preemptive-delete": true,
+                "delete-job": true,
+                "monitor-job": true
+            }
+        }
+    ]
+}

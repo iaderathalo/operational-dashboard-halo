@@ -1,0 +1,338 @@
+@if (loadError) {
+    <div class="dashboard-state dashboard-state-error">{{ loadError }}</div>
+} @else if (isLoading) {
+    <div class="dashboard-state">Loading dashboard...</div>
+} @else {
+    <div class="layout">
+        <button
+            *ngIf="isMobileViewport && isMobileSidebarOpen"
+            type="button"
+            class="sidebar-backdrop"
+            aria-label="Close portfolio tree menu"
+            (click)="closeMobileSidebar()"
+        ></button>
+
+        <aside
+            class="sidebar"
+            [class.collapsed]="sidebarCollapsed && !isMobileViewport"
+            [class.mobile-drawer]="isMobileViewport"
+            [class.mobile-open]="isMobileViewport && isMobileSidebarOpen"
+            [style.left]="isMobileViewport ? (isMobileSidebarOpen ? '0' : '-120vw') : null"
+        >
+            <div class="sidebar-header">
+                <h3>Portfolio Tree</h3>
+                <button
+                    type="button"
+                    class="sidebar-toggle"
+                    (click)="toggleSidebar()"
+                    [attr.title]="isMobileViewport ? 'Close portfolio tree' : 'Toggle sidebar'"
+                    [attr.aria-label]="isMobileViewport ? 'Close portfolio tree' : 'Toggle sidebar'"
+                >
+                    <ng-container *ngIf="isMobileViewport; else desktopSidebarIcon">
+                        <svg
+                            width="14"
+                            height="14"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        >
+                            <path d="M3 3l8 8" />
+                            <path d="M11 3L3 11" />
+                        </svg>
+                    </ng-container>
+                    <ng-template #desktopSidebarIcon>
+                        <svg
+                            width="14"
+                            height="14"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        >
+                            <path d="M9 2L4 7l5 5" />
+                        </svg>
+                    </ng-template>
+                </button>
+            </div>
+            <div class="sidebar-tree" *ngIf="isMobileViewport || !sidebarCollapsed">
+                <ng-container
+                    *ngTemplateOutlet="treeTemplate; context: { nodes: [data] }"
+                ></ng-container>
+            </div>
+        </aside>
+
+        <div class="pf-main">
+            <div class="view-container">
+                <div class="mobile-tree-toolbar" *ngIf="isMobileViewport">
+                    <button
+                        type="button"
+                        class="mobile-tree-button"
+                        [attr.aria-expanded]="isMobileSidebarOpen"
+                        aria-label="Open portfolio tree menu"
+                        (click)="toggleSidebar()"
+                    >
+                        <svg
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        >
+                            <path d="M2 4h12" />
+                            <path d="M2 8h12" />
+                            <path d="M2 12h12" />
+                        </svg>
+                        <span>Portfolio Tree</span>
+                    </button>
+                    <span class="mobile-tree-current">{{ currentNode.name }}</span>
+                </div>
+
+                <div class="breadcrumb">
+                    <ng-container *ngFor="let crumb of breadcrumbPath; let last = last">
+                        <span
+                            class="breadcrumb-item"
+                            [class.current]="last"
+                            (click)="!last && navigateToNode(crumb.id)"
+                            >{{ crumb.name }}</span
+                        >
+                        <span class="breadcrumb-sep" *ngIf="!last">&gt;</span>
+                    </ng-container>
+                </div>
+
+                <div class="pf-summary-bar">
+                    <div class="pf-summary-stat">
+                        <span class="label">Total Applications</span>
+                        <span class="value">{{ getAllApps(currentNode).length }}</span>
+                    </div>
+                    <div class="pf-summary-stat">
+                        <span class="label">Portfolio Status</span>
+                        <div class="breakdown">
+                            <span class="g"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'health').green
+                                }}
+                                Green</span
+                            >
+                            <span class="a"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'health').amber
+                                }}
+                                Amber</span
+                            >
+                            <span class="r"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'health').red
+                                }}
+                                Red</span
+                            >
+                        </div>
+                    </div>
+                    <div class="pf-summary-stat">
+                        <span class="label">User Perception</span>
+                        <div class="breakdown">
+                            <span class="g"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'perception').green
+                                }}
+                                Green</span
+                            >
+                            <span class="a"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'perception').amber
+                                }}
+                                Amber</span
+                            >
+                            <span class="r"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'perception').red
+                                }}
+                                Critical</span
+                            >
+                        </div>
+                    </div>
+                    <div class="pf-summary-stat">
+                        <span class="label">Active Incidents</span>
+                        <span
+                            class="value"
+                            [class.red]="totalIncidents(getAllApps(currentNode)) > 0"
+                        >
+                            {{ totalIncidents(getAllApps(currentNode)) }}
+                        </span>
+                    </div>
+                </div>
+
+                <ng-container *ngIf="currentNode.children.length > 0">
+                    <ng-container *ngFor="let child of currentNode.children">
+                        <ng-container
+                            *ngTemplateOutlet="portfolioSectionTemplate; context: { node: child }"
+                        ></ng-container>
+                    </ng-container>
+                </ng-container>
+
+                <ng-container *ngIf="currentNode.apps.length > 0">
+                    <h2 class="section-title">
+                        Applications<span *ngIf="currentNode.children.length > 0">
+                            (directly assigned)</span
+                        >
+                    </h2>
+                    <ng-container
+                        *ngTemplateOutlet="appTableTemplate; context: { apps: currentNode.apps }"
+                    ></ng-container>
+                </ng-container>
+            </div>
+        </div>
+    </div>
+}
+
+<ng-template #portfolioSectionTemplate let-node="node">
+    <div class="subpf-section">
+        <div class="subpf-header" (click)="toggleSection(node.id)">
+            <svg
+                class="subpf-arrow"
+                [class.expanded]="expandedSections.has(node.id)"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <path d="M4 2l5 5-5 5" />
+            </svg>
+            <span class="subpf-name">{{ node.name }}</span>
+            <span class="subpf-owner">{{ node.owner }} ({{ node.role }})</span>
+        </div>
+
+        <div class="subpf-body" [class.open]="expandedSections.has(node.id)">
+            <div class="subpf-status-row">
+                <div class="subpf-status-block">
+                    <span class="subpf-status-label">Portfolio Status:</span>
+                    <span class="status-count green">
+                        <span class="status-dot green"></span
+                        >{{ countByStatus(getAllApps(node), 'health').green }} Green
+                    </span>
+                    <span class="status-count amber">
+                        <span class="status-dot amber"></span
+                        >{{ countByStatus(getAllApps(node), 'health').amber }} Amber
+                    </span>
+                    <span class="status-count red">
+                        <span class="status-dot red"></span
+                        >{{ countByStatus(getAllApps(node), 'health').red }} Red
+                    </span>
+                </div>
+
+                <div class="subpf-status-block">
+                    <span class="subpf-status-label">User Perception:</span>
+                    <span class="status-count green">
+                        <span class="status-dot green"></span
+                        >{{ countByStatus(getAllApps(node), 'perception').green }} Green
+                    </span>
+                    <span class="status-count amber">
+                        <span class="status-dot amber"></span
+                        >{{ countByStatus(getAllApps(node), 'perception').amber }} Amber
+                    </span>
+                    <span class="status-count red">
+                        <span class="status-dot red"></span
+                        >{{ countByStatus(getAllApps(node), 'perception').red }} Critical
+                    </span>
+                </div>
+            </div>
+
+            <ng-container *ngIf="node.apps.length > 0">
+                <ng-container
+                    *ngTemplateOutlet="appTableTemplate; context: { apps: node.apps }"
+                ></ng-container>
+            </ng-container>
+
+            <ng-container *ngFor="let child of node.children">
+                <ng-container
+                    *ngTemplateOutlet="portfolioSectionTemplate; context: { node: child }"
+                ></ng-container>
+            </ng-container>
+        </div>
+    </div>
+</ng-template>
+
+<ng-template #appTableTemplate let-apps="apps">
+    <div class="table-scroll">
+        <table class="app-table">
+            <thead>
+                <tr>
+                    <th>Application</th>
+                    <th>Health</th>
+                    <th>Perception</th>
+                    <th>Uptime</th>
+                    <th>Users</th>
+                    <th>Incidents</th>
+                    <th>Last Incident</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr
+                    *ngFor="let app of apps"
+                    (click)="openAppDetail(app)"
+                    title="Click to view details"
+                >
+                    <td data-label="Application">{{ app.name }}</td>
+                    <td data-label="Health">
+                        <div class="status-cell">
+                            <span class="status-dot" [ngClass]="app.health"></span>
+                            <span class="status-text" [ngClass]="app.health">{{
+                                healthLabel(app.health)
+                            }}</span>
+                        </div>
+                    </td>
+                    <td data-label="Perception">
+                        <div class="status-cell">
+                            <span class="status-dot" [ngClass]="app.perception"></span>
+                            <span class="status-text" [ngClass]="app.perception">{{
+                                perceptionLabel(app.perception)
+                            }}</span>
+                        </div>
+                    </td>
+                    <td data-label="Uptime" [class.metric-bad]="app.uptime < 99">
+                        {{ app.uptime }}%
+                    </td>
+                    <td data-label="Users">{{ app.users | number }}</td>
+                    <td data-label="Incidents" [class.metric-bad]="app.incidents > 0">
+                        {{ app.incidents }}
+                    </td>
+                    <td data-label="Last Incident">{{ app.lastIncident }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</ng-template>
+
+<ng-template #treeTemplate let-nodes="nodes">
+    <div *ngFor="let node of nodes" class="tree-item">
+        <div
+            class="tree-row"
+            [class.active]="node.id === currentNode.id"
+            (click)="selectTreeNode(node.id)"
+        >
+            <span
+                class="tree-arrow"
+                [class.expanded]="expandedTreeNodes.has(node.id)"
+                [class.hidden]="!node.children || node.children.length === 0"
+                (click)="toggleTreeNode(node.id, $event)"
+            >
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 2l5 5-5 5" />
+                </svg>
+            </span>
+            <span class="tree-status-dot" [ngClass]="worstNodeStatus(node)"></span>
+            <span class="tree-label">{{ node.name }}</span>
+        </div>
+        <div
+            class="tree-children"
+            [class.open]="expandedTreeNodes.has(node.id)"
+            *ngIf="node.children && node.children.length > 0"
+        >
+            <ng-container
+                *ngTemplateOutlet="treeTemplate; context: { nodes: node.children }"
+            ></ng-container>
+        </div>
+    </div>
+</ng-template>

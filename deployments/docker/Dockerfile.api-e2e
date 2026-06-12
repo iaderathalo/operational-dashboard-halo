@@ -1,0 +1,60 @@
+# ------------------------------------------------------------------------
+
+FROM base-images.mgti-dal-so-art.mrshmc.com/mmc/ubuntu/nodejs-24:jammy AS base
+
+RUN apt-get update -qq \
+    && apt-get install -y jq unzip \
+    && apt-get clean
+
+# Install the platform CLI to be used for authenticating with Hashicorp Vault in AWS.
+RUN PLATFORM_VAULT_CLI_VERSION=$(curl -s https://mgti-dal-so-art.mrshmc.com/artifactory/raw/mmc-platform-cli/latest.txt) \   
+    && curl -L -o mpc https://mgti-dal-so-art.mrshmc.com/artifactory/raw/mmc-platform-cli/${PLATFORM_VAULT_CLI_VERSION} \
+    && chmod +x mpc \
+    && mv ./mpc /usr/bin
+
+# Switch to the less-privileged Node user in the container for improved security.
+# See: https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md#non-root-user
+ENV CYPRESS_INSTALL_BINARY=0
+
+RUN useradd -m node
+USER node
+RUN mkdir -p /home/node/app
+WORKDIR /home/node/app
+
+# Reference the ZScaler root CA into the image for potential installations
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.com/ZscalerRootCertificate-2048-SHA256.crt
+
+# ------------------------------------------------------------------------
+
+FROM base AS prod
+
+ARG DIST_FOLDER_LOCATION
+
+COPY --chown=node:node $DIST_FOLDER_LOCATION /home/node/app
+COPY --chown=node:node ./package-lock.json /home/node/app
+
+COPY .npmrc .npmrc
+
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+EXPOSE 8080
+
+COPY --chown=node:node ./deployments/docker/entrypoint.sh ./entrypoint.sh
+RUN chmod u+x entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
+CMD [ "./node_modules/.bin/jest" ]
+
+# Record build metadata in the image
+ARG BUILD_DATE_TIME
+LABEL BUILD_DATE_TIME $BUILD_DATE_TIME
+ENV BUILD_DATE_TIME $BUILD_DATE_TIME
+
+ARG BUILD_GIT_COMMIT
+LABEL BUILD_GIT_COMMIT $BUILD_GIT_COMMIT
+ENV BUILD_GIT_COMMIT $BUILD_GIT_COMMIT
+
+ARG BUILD_VERSION
+LABEL BUILD_VERSION $BUILD_VERSION
+ENV BUILD_VERSION $BUILD_VERSION
+
+LABEL APPLICATIONKEY "operdas1"

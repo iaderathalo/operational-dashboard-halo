@@ -1,0 +1,5 @@
+{
+  "uri": "MONGOURI",
+  "migrationsDir": "db",
+  "migrationsCollection": "migrations_changelog"
+}
