@@ -85,7 +85,7 @@ const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
                 ),
                 createApp(
                     'bu1-cs-support-ticketing',
-                    'Support Ticketing',
+                    'ServiceNow ITSM',
                     'green',
                     'green',
                     99.88,

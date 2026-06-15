@@ -51,6 +51,48 @@
 
 ---
 
+## Planned Data Sources
+
+| Domain | Source System | Notes |
+| ------ | ------------- | ----- |
+| Portfolio hierarchy, TPM ownership, application catalog | PlanView EA | Source of metadata from the current `PlanviewData_Dremio_CAI_Applications.json` export; normalized before ingestion and keyed by `InternalID` |
+| Application health | Datadog | Primary telemetry source for health, uptime, latency, error rate, failing checks, and health-event history |
+| Container health | app.komodor.com | Planned source for Kubernetes and container runtime health |
+| Incident ticketing | ServiceNow | Planned incident ticketing platform |
+| Collaboration alerts | Microsoft Teams | Planned collaboration channel for incident notifications |
+
+### PlanView Export And Datadog Correlation
+
+The current PlanView seed file at `db/PlanviewData_Dremio_CAI_Applications.json` contains 8,519 records and 80 fields, but it is not valid JSON as stored because adjacent objects are missing commas. The ingestion path must normalize the export first, then filter to the initial operational scope of `Status = In Production` before upserting dashboard applications.
+
+For the first integration pass we will keep only the metadata needed to identify, group, and route applications:
+
+- `InternalID` as the canonical dashboard `applicationId`
+- `ProductCode` as the immutable external PlanView traceability key
+- `CASTKey` as the preferred `shortCode` and primary Datadog correlation tag
+- `ProductName` and `LongDescription` for display
+- `BusinessDeliveryPortfolioName` for portfolio and business-unit grouping
+- `DrTier` for SLA tiering
+- `PortfolioOwnerName`, `PortfolioOwnerEmail`, `BusinessOwner`, `ItOwner`, and `ItOwnerEmail` for ownership and contact metadata
+- `InternalUserCount` and `ExternalUserCount` only as a registered-user baseline, not as live telemetry
+- `Hosting`, `DataClassification`, and `OwningOrganization` as supporting context
+
+The following exported fields are not strong enough to be first-pass join keys:
+
+- `CA_Application_UUID` is only partially populated and not globally unique
+- `ServiceNowKey` and `SN_Sys_Id` are useful for ITSM traceability, not primary telemetry joins
+- `TechnicalContact` and `TechnicalContactEmail` are empty in the current sample and should be ignored
+
+Datadog must provide the main operational telemetry for the dashboard. The preferred correlation order is:
+
+1. `cast_key:<CASTKey>` on Datadog services, monitors, and synthetic tests
+2. `planview_internal_id:<InternalID>` as the stable fallback tag
+3. `planview_product_code:<ProductCode>` as the audit and reconciliation tag
+
+The dashboard must not join PlanView and Datadog on `ProductName`, because the export shows business-facing names that can change over time. The attached recording only confirms that Datadog and PlanView are accessed through Okta SSO by operators; the integration itself should use export/API ingestion rather than UI automation.
+
+---
+
 ## Backend (NestJS API)
 
 ### Structure
@@ -134,7 +176,11 @@ apps/ui/src/
 | Integration    | Purpose                   | Package                                |
 | -------------- | ------------------------- | -------------------------------------- |
 | Okta           | Authentication (OIDC/JWT) | @okta/okta-angular, @okta/jwt-verifier |
-| Datadog        | APM/Tracing               | dd-trace                               |
+| Datadog        | APM/Tracing + operational telemetry | dd-trace                        |
+| PlanView EA    | Portfolio metadata and ownership sync | Planned adapter                 |
+| ServiceNow     | Incident ticket sync      | Planned adapter                        |
+| Microsoft Teams | Operational notifications | Planned adapter                       |
+| app.komodor.com | Container health ingestion | Planned adapter                      |
 | Polaris Logger | Structured logging (SIEM) | @mmctech-artifactory/polaris-logger    |
 | MongoDB Atlas  | Data persistence          | mongodb                                |
 | Helmet         | Security headers          | helmet                                 |

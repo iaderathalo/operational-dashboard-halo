@@ -21,11 +21,14 @@ import ApplicationsModule from '../applications/applications.module';
                 inMemoryPortfolioRepository: InMemoryPortfolioRepository,
                 mongoPortfolioRepository: MongoPortfolioRepository
             ) => {
+                const useRealData = configService.get<string>('USE_REAL_DATA') === 'true';
                 const mongoUrl =
                     configService.get<string>('API_MONGODB_API_DB_URL') ||
                     configService.get<string>('API_MONGODB_DB_URL');
 
-                return mongoUrl ? mongoPortfolioRepository : inMemoryPortfolioRepository;
+                return mongoUrl && useRealData
+                    ? mongoPortfolioRepository
+                    : inMemoryPortfolioRepository;
             },
             inject: [ConfigService, InMemoryPortfolioRepository, MongoPortfolioRepository],
         },

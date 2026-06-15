@@ -46,11 +46,15 @@ ensure_node_20() {
 
 configure_local_mongo() {
     if [ -n "${API_MONGODB_API_DB_URL:-}" ]; then
+        USE_REAL_DATA="${USE_REAL_DATA:-true}"
+        export USE_REAL_DATA
         echo "Using MongoDB at ${API_MONGODB_API_DB_URL}"
         return
     fi
 
     if [ -n "${API_MONGODB_DB_URL:-}" ]; then
+        USE_REAL_DATA="${USE_REAL_DATA:-true}"
+        export USE_REAL_DATA
         echo "Using MongoDB at ${API_MONGODB_DB_URL}"
         return
     fi
@@ -59,10 +63,14 @@ configure_local_mongo() {
         docker ps --format '{{.Names}}' | grep -qx "$LOCAL_MONGO_CONTAINER"; then
         API_MONGODB_API_DB_URL="$LOCAL_MONGO_URL"
         export API_MONGODB_API_DB_URL
+        USE_REAL_DATA="${USE_REAL_DATA:-true}"
+        export USE_REAL_DATA
         echo "Using local MongoDB container at ${API_MONGODB_API_DB_URL}"
         return
     fi
 
+    USE_REAL_DATA="${USE_REAL_DATA:-false}"
+    export USE_REAL_DATA
     echo "No MongoDB URL configured; API will use seeded in-memory data."
 }
 

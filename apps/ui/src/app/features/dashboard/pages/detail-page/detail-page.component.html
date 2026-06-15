@@ -1204,38 +1204,24 @@
             <div class="tab-panel" [class.active]="activeTab === 'contacts'">
                 <div class="two-col">
                     <div class="card">
-                        <div class="card-title">On-Call Now</div>
-                        <div class="contact-grid compact-grid">
-                            <div *ngFor="let contact of view.contacts.onCall" class="contact-card">
-                                <div class="contact-avatar">{{ contact.initials }}</div>
-                                <div>
-                                    <div class="contact-name">{{ contact.name }}</div>
-                                    <div class="contact-role">{{ contact.role }}</div>
-                                    <div class="contact-links">
-                                        <button type="button" class="contact-link">Call</button>
-                                        <button type="button" class="contact-link">Slack</button>
-                                        <button type="button" class="contact-link">Email</button>
-                                    </div>
+                        <div class="card-title">AMS Support</div>
+                        <div class="contact-detail-list">
+                            <div
+                                *ngFor="let supportItem of view.contacts.amsSupport"
+                                class="contact-detail-row"
+                            >
+                                <div class="contact-label">{{ supportItem.label }}</div>
+                                <div class="contact-name">{{ supportItem.value }}</div>
+                                <div *ngIf="supportItem.secondary" class="contact-role">
+                                    {{ supportItem.secondary }}
                                 </div>
                             </div>
                         </div>
-                        <div class="footnote">{{ view.contacts.onCallRotation }}</div>
                     </div>
 
                     <div class="card">
                         <div class="card-title">Escalation Path</div>
-                        <div class="contact-grid compact-grid">
-                            <div
-                                *ngFor="let contact of view.contacts.escalation"
-                                class="contact-card"
-                            >
-                                <div class="contact-avatar">{{ contact.initials }}</div>
-                                <div>
-                                    <div class="contact-name">{{ contact.name }}</div>
-                                    <div class="contact-role">{{ contact.role }}</div>
-                                </div>
-                            </div>
-                        </div>
+                        <div class="contact-note">{{ view.contacts.escalationPath }}</div>
                     </div>
                 </div>
 
@@ -1243,14 +1229,11 @@
                     <div class="card-title">Application Team</div>
                     <div class="contact-grid">
                         <div *ngFor="let contact of view.contacts.team" class="contact-card">
-                            <div class="contact-avatar">{{ contact.initials }}</div>
                             <div>
-                                <div class="contact-name">{{ contact.name }}</div>
-                                <div class="contact-role">{{ contact.role }}</div>
-                                <div class="contact-links">
-                                    <button type="button" class="contact-link">Call</button>
-                                    <button type="button" class="contact-link">Slack</button>
-                                    <button type="button" class="contact-link">Email</button>
+                                <div class="contact-label">{{ contact.label }}</div>
+                                <div class="contact-name">{{ contact.value }}</div>
+                                <div *ngIf="contact.secondary" class="contact-role">
+                                    {{ contact.secondary }}
                                 </div>
                             </div>
                         </div>
@@ -1260,10 +1243,10 @@
                 <div class="card">
                     <div class="card-title">Shared Resources</div>
                     <div class="shared-grid">
-                        <span>Slack Channel</span><strong>{{ view.shared.slack }}</strong>
-                        <span>Email DL</span><strong>{{ view.shared.email }}</strong>
-                        <span>NOC Bridge</span><strong>{{ view.shared.noc }}</strong>
-                        <span>Vendor Support</span><strong>{{ view.shared.vendor }}</strong>
+                        <span>Microsoft Teams Channel</span
+                        ><strong>{{ view.shared.teamsChannel }}</strong> <span>Email DL</span
+                        ><strong>{{ view.shared.email }}</strong> <span>Vendor Support</span
+                        ><strong>{{ view.shared.vendor }}</strong>
                     </div>
                 </div>
             </div>

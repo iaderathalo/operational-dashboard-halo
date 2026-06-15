@@ -17,6 +17,7 @@ import OktaGuard from './common/auth-guards/oktaGuard.service';
 export const configSchema = Joi.object({
     API_MONGODB_API_DB_URL: Joi.string(),
     API_MONGODB_DB_URL: Joi.string(),
+    USE_REAL_DATA: Joi.string().default('false'),
     API_MONGO_PW: Joi.string(),
     API_MSSQL_PW: Joi.string(),
     API_MSSQL_DB_URL: Joi.string(),

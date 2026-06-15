@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-export type DashboardDetailStatus = 'green' | 'amber' | 'red';
+export type DashboardDetailStatus = 'green' | 'amber' | 'red' | 'undefined';
 export type DashboardDetailTrend = 'up' | 'down' | 'neutral';
 export type DashboardDetailTimelineTone = 'g' | 'a' | 'r';
 export type DashboardDetailHeatmapTone = 'g' | 'a' | 'r' | 'x';
@@ -135,17 +135,21 @@ export interface DashboardDetailPersonCard {
     role: string;
 }
 
+export interface DashboardDetailContactEntry {
+    label: string;
+    value: string;
+    secondary?: string;
+}
+
 export interface DashboardDetailContacts {
-    onCall: DashboardDetailPersonCard[];
-    onCallRotation: string;
-    escalation: DashboardDetailPersonCard[];
-    team: DashboardDetailPersonCard[];
+    amsSupport: DashboardDetailContactEntry[];
+    escalationPath: string;
+    team: DashboardDetailContactEntry[];
 }
 
 export interface DashboardDetailSharedContacts {
-    slack: string;
+    teamsChannel: string;
     email: string;
-    noc: string;
     vendor: string;
 }
 

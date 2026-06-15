@@ -35,7 +35,7 @@ import TasksService from './tasks.service';
 @UseInterceptors(ClassSerializerInterceptor)
 export default class TasksController {
     /**
-     * @param {TasksService} tasksService - instance of TaskService.
+     * @param {object} tasksService - task service dependency used to handle task operations
      */
     constructor(private readonly tasksService: TasksService) {}
 
@@ -45,9 +45,10 @@ export default class TasksController {
      *
      * Nest ensures that a HTTP response status code of 201 is set when this method
      * completes successfully.
-     * @param {Request}  request The express request object. Injected by Nest at runtime.
-     * @param {Response} response The express response object. Injected by Nest at runtime.
-     * @param {CreateTaskRequest} createTaskDto The  values for a new task as per the OpenAPI schema object.
+     * @param {object} request - Express request object injected by Nest at runtime
+     * @param {object} response - Express response object injected by Nest at runtime
+     * @param {object} createTaskDto - values for a new task as defined by the task creation schema
+     * @returns {Promise<void>} resolves when the task is created and the response is sent
      */
     @Post()
     async create(
@@ -62,7 +63,7 @@ export default class TasksController {
 
     /**
      * Returns all the tasks for the user. This allows the user to browse all tasks in a UI.
-     * @returns {Promise<GetTasksResponse>} Response object contains an array of Tasks.
+     * @returns {Promise<object>} response object containing the array of tasks
      */
     @Get()
     async findAll(): Promise<GetTasksResponse> {
@@ -76,8 +77,8 @@ export default class TasksController {
 
     /**
      * Returns the specific details of a task for the user.
-     * @param {string} id - A ID for the task.
-     * @returns {Promise<Task>} The details of the identified task.
+     * @param {string} id - identifier of the task
+     * @returns {Promise<object>} details of the identified task
      * @throws NotFoundException if the task ID is not found
      */
     @Get(':id')
@@ -95,8 +96,9 @@ export default class TasksController {
      * Throws a NotFoundException if the task ID is not found.
      *
      * Sets a HTTP response status code of 204 when this method completes successfully.
-     * @param {string} id - ID of the task to update
-     * @param {UpdateTaskRequest} updateTaskDto - Task with new object properties.
+     * @param {string} id - identifier of the task to update
+     * @param {object} updateTaskDto - updated task payload
+     * @returns {Promise<void>} resolves when the task update completes
      */
     @Put(':id')
     @HttpCode(204)
@@ -121,6 +123,7 @@ export default class TasksController {
      * Deletes all the tasks for the user.
      *
      * Sets a HTTP response status code of 204 when this method completes successfully.
+     * @returns {Promise<object>} response containing the number of deleted tasks
      */
     @Delete()
     async removeAll(): Promise<DeleteTasksResponse> {

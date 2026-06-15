@@ -8,6 +8,10 @@ import { filter } from 'rxjs';
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
 import environment from '../environments/environment';
+import DashboardService from './features/dashboard/services/dashboard.service';
+import DashboardDataModeService, {
+    DashboardDataMode,
+} from './features/dashboard/services/dashboard-data-mode.service';
 import { PortfolioAppContext } from './features/dashboard/models/portfolio.model';
 
 import('@mmctech/micro-lenai-webcomponent');
@@ -59,6 +63,8 @@ export default class AppComponent {
 
     headerDetailLabel = '';
 
+    dataMode: DashboardDataMode;
+
     private pendingHeaderDetailId = '';
 
     microLenAiApiUrl =
@@ -76,8 +82,11 @@ export default class AppComponent {
     constructor(
         public injector: Injector,
         private http: HttpClient,
-        private router: Router
+        private router: Router,
+        private dashboardService: DashboardService,
+        private dataModeService: DashboardDataModeService
     ) {
+        this.dataMode = this.dataModeService.currentMode;
         // the OktaAuth instance is not directly available through the constructor dependency injection. Use the injector instead
         this.oktaAuth = injector.get(OKTA_CONFIG, null)?.oktaAuth ?? null;
         this.loadHeaderUserProfile().catch(() => undefined);
@@ -93,6 +102,14 @@ export default class AppComponent {
                     this.loadHeaderUserProfile().catch(() => undefined);
                 }
             });
+
+        this.dataModeService.mode$.subscribe((mode) => {
+            this.dataMode = mode;
+
+            if (this.isDashboardRoute) {
+                this.updateHeaderContext(this.router.url);
+            }
+        });
     }
 
     /**
@@ -152,6 +169,14 @@ export default class AppComponent {
     }
 
     /**
+     * Switches the dashboard between real and demo data.
+     * @param {DashboardDataMode} mode - selected dashboard data mode
+     */
+    setDataMode(mode: DashboardDataMode): void {
+        this.dataModeService.setMode(mode);
+    }
+
+    /**
      * Updates the unified header context based on the active route.
      * @param {string} url - current route URL
      */
@@ -180,22 +205,20 @@ export default class AppComponent {
     private loadHeaderDetailLabel(appId: string): void {
         this.pendingHeaderDetailId = appId;
 
-        this.http
-            .get<PortfolioAppContext>(
-                `${environment.apiBaseUrl}/dashboard/portfolio/apps/${encodeURIComponent(appId)}`
-            )
-            .subscribe({
-                next: (context) => {
-                    if (this.pendingHeaderDetailId === appId) {
-                        this.headerDetailLabel = context.app.name || 'Application Detail';
-                    }
-                },
-                error: () => {
-                    if (this.pendingHeaderDetailId === appId) {
-                        this.headerDetailLabel = 'Application Detail';
-                    }
-                },
-            });
+        this.http;
+
+        this.dashboardService.getPortfolioAppContext(appId).subscribe({
+            next: (context) => {
+                if (this.pendingHeaderDetailId === appId) {
+                    this.headerDetailLabel = context.app.name || 'Application Detail';
+                }
+            },
+            error: () => {
+                if (this.pendingHeaderDetailId === appId) {
+                    this.headerDetailLabel = 'Application Detail';
+                }
+            },
+        });
     }
 
     /**

@@ -1,8 +1,10 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 import { PortfolioNode, PortfolioApp, StatusCounts } from '../../models/portfolio.model';
 import DashboardService from '../../services/dashboard.service';
+import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 
 const EMPTY_PORTFOLIO_NODE: PortfolioNode = {
     id: 'root',
@@ -19,7 +21,7 @@ const EMPTY_PORTFOLIO_NODE: PortfolioNode = {
     styleUrls: ['./portfolio-page.component.scss'],
     standalone: false,
 })
-export default class PortfolioPageComponent implements OnInit {
+export default class PortfolioPageComponent implements OnInit, OnDestroy {
     data: PortfolioNode = EMPTY_PORTFOLIO_NODE;
 
     currentNode: PortfolioNode = EMPTY_PORTFOLIO_NODE;
@@ -40,7 +42,14 @@ export default class PortfolioPageComponent implements OnInit {
 
     loadError = '';
 
-    private readonly statusOrder: Array<PortfolioApp['health']> = ['green', 'amber', 'red'];
+    private modeSubscription?: Subscription;
+
+    private readonly statusOrder: Array<PortfolioApp['health']> = [
+        'green',
+        'amber',
+        'red',
+        'undefined',
+    ];
 
     private readonly incidentSeed = 0;
 
@@ -48,12 +57,14 @@ export default class PortfolioPageComponent implements OnInit {
         green: 'GREEN',
         amber: 'AMBER',
         red: 'RED',
+        undefined: 'UNDEFINED',
     };
 
     private readonly perceptionLabels: Record<PortfolioApp['perception'], string> = {
         green: 'GREEN',
         amber: 'AMBER',
         red: 'CRITICAL',
+        undefined: 'UNDEFINED',
     };
 
     /**
@@ -63,7 +74,8 @@ export default class PortfolioPageComponent implements OnInit {
      */
     constructor(
         private router: Router,
-        private dashboardService: DashboardService
+        private dashboardService: DashboardService,
+        private dataModeService: DashboardDataModeService
     ) {}
 
     /**
@@ -71,7 +83,14 @@ export default class PortfolioPageComponent implements OnInit {
      */
     ngOnInit(): void {
         this.updateViewportState();
-        this.loadPortfolio();
+        this.modeSubscription = this.dataModeService.mode$.subscribe(() => this.loadPortfolio());
+    }
+
+    /**
+     * Releases the mode subscription when the page is destroyed.
+     */
+    ngOnDestroy(): void {
+        this.modeSubscription?.unsubscribe();
     }
 
     /**
@@ -107,7 +126,7 @@ export default class PortfolioPageComponent implements OnInit {
                 ...counts,
                 [status]: apps.filter((app) => app[field] === status).length,
             }),
-            { green: 0, amber: 0, red: 0 }
+            { green: 0, amber: 0, red: 0, undefined: 0 }
         );
     }
 
@@ -120,7 +139,16 @@ export default class PortfolioPageComponent implements OnInit {
         const h = this.countByStatus(apps, 'health');
         if (h.red > 0) return 'red';
         if (h.amber > 0) return 'amber';
-        return 'green';
+        if (h.green > 0) return 'green';
+        return 'undefined';
+    }
+
+    formatUptime(uptime: number | null): string {
+        return uptime === null ? 'Undefined' : `${uptime}%`;
+    }
+
+    formatActiveUsers(activeUsers: number | null): string {
+        return activeUsers === null ? 'Undefined' : activeUsers.toLocaleString();
     }
 
     /**

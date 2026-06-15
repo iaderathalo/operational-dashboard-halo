@@ -6,7 +6,7 @@ const createApp = (
     name: string,
     health: PortfolioApp['health'],
     perception: PortfolioApp['perception'],
-    uptime: number,
+    uptime: number | null,
     users: number,
     incidents: number,
     lastIncident: string
@@ -17,6 +17,9 @@ const createApp = (
     perception,
     uptime,
     users,
+    totalInternalUsers: users,
+    totalExternalUsers: 0,
+    activeUsers: users,
     incidents,
     lastIncident,
 });
@@ -111,7 +114,7 @@ export const PORTFOLIO_DATA: PortfolioNode = {
                         ),
                         createApp(
                             'bu1-cs-support-ticketing',
-                            'Support Ticketing',
+                            'ServiceNow ITSM',
                             'green',
                             'green',
                             99.88,

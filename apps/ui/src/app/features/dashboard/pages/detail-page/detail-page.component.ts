@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 import {
     DashboardDetailChannelOption,
@@ -21,6 +22,7 @@ import {
     PERCEPTION_STATUS_LABELS,
 } from './detail-page.data';
 import DashboardService from '../../services/dashboard.service';
+import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 
 @Component({
     selector: 'polaris-detail-page',
@@ -77,7 +79,11 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     toastMessage = '';
 
+    private currentAppId = '';
+
     private toastTimeoutHandle?: ReturnType<typeof setTimeout>;
+
+    private modeSubscription?: Subscription;
 
     /**
      * Creates the detail page component with route and navigation services.
@@ -88,7 +94,8 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     constructor(
         private route: ActivatedRoute,
         private router: Router,
-        private dashboardService: DashboardService
+        private dashboardService: DashboardService,
+        private dataModeService: DashboardDataModeService
     ) {}
 
     /**
@@ -103,13 +110,18 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
             return;
         }
 
-        this.loadDetail(id);
+        this.currentAppId = id;
+        this.modeSubscription = this.dataModeService.mode$.subscribe(() =>
+            this.loadDetail(this.currentAppId)
+        );
     }
 
     /**
      * Clears any pending toast timer when the component is destroyed.
      */
     ngOnDestroy(): void {
+        this.modeSubscription?.unsubscribe();
+
         if (this.toastTimeoutHandle) {
             clearTimeout(this.toastTimeoutHandle);
         }

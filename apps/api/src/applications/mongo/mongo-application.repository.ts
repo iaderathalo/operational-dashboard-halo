@@ -11,6 +11,14 @@ import { ApplicationRepository } from '../application.repository';
 import SEED_APPLICATIONS from '../seed/applications.seed';
 
 type MongoDbId = Record<'_id', ObjectId | string>;
+type ApplicationFilters = {
+    id?: string;
+    status?: string;
+    tier?: number;
+    businessUnit?: string;
+    search?: string;
+    ownerEmail?: string;
+};
 
 @Injectable()
 export default class MongoApplicationRepository
@@ -19,6 +27,11 @@ export default class MongoApplicationRepository
 {
     collectionName = 'applications';
 
+    /**
+     * Creates the Mongo-backed application repository.
+     * @param {object} configService - configuration service for database settings
+     * @param {object} logger - Polaris logger instance
+     */
     constructor(
         configService: ConfigService,
         public logger: Logger
@@ -26,6 +39,11 @@ export default class MongoApplicationRepository
         super(configService, logger);
     }
 
+    /**
+     * Finds a single application by Mongo identifier.
+     * @param {{ _id: string }} appId - wrapped application id value
+     * @returns {Promise<object>} matching application payload
+     */
     async findOne(appId): Promise<Application> {
         const { _id: id } = appId;
         const app = await (
@@ -55,27 +73,108 @@ export default class MongoApplicationRepository
         return app;
     }
 
+    /**
+     * Returns all stored applications.
+     * @returns {Promise<object[]>} list of stored applications
+     */
     async findAll(): Promise<Application[]> {
         const apps = await (await this.getCollection<Application>(this.collectionName))
             .find()
             .toArray();
 
-        return apps.map((app: Application & MongoDbId) => {
-            const id = String(app._id);
-            // eslint-disable-next-line no-param-reassign
-            delete app._id;
-            return { ...app, id };
-        });
+        return apps.map((app: Application & MongoDbId) =>
+            MongoApplicationRepository.toApplication(app)
+        );
     }
 
-    async findByFilters(filters: {
-        status?: string;
-        tier?: number;
-        businessUnit?: string;
-        search?: string;
-    }): Promise<Application[]> {
-        const query: Record<string, unknown> = {};
+    /**
+     * Finds applications matching the provided filter set.
+     * @param {object} filters - incoming application filter values
+     * @returns {Promise<object[]>} matching application payloads
+     */
+    async findByFilters(filters: ApplicationFilters): Promise<Application[]> {
+        const query = MongoApplicationRepository.buildFiltersQuery(filters);
+        const apps = await (await this.getCollection<Application>(this.collectionName))
+            .find(query)
+            .toArray();
 
+        return apps.map((app: Application & MongoDbId) =>
+            MongoApplicationRepository.toApplication(app)
+        );
+    }
+
+    /**
+     * Replaces a single application document by Mongo identifier.
+     * @param {{ _id: string }} appId - wrapped application id value
+     * @param {Application} entity - replacement application payload
+     * @returns {Promise<number>} 1 when the document was replaced, otherwise 0
+     */
+    async updateOne(appId, entity: Application): Promise<number> {
+        const { _id: id } = appId;
+        const resp = await (
+            await this.getCollection(this.collectionName)
+        ).findOneAndReplace(
+            { _id: ObjectId.createFromHexString(id) },
+            { ...entity, updatedAt: new Date().toISOString() }
+        );
+        return resp?._id ? 1 : 0;
+    }
+
+    /**
+     * Deletes a single application document by Mongo identifier.
+     * @param {{ _id: string }} appId - wrapped application id value
+     * @returns {Promise<boolean>} true when a document was deleted
+     */
+    async deleteOne(appId): Promise<boolean> {
+        const { _id: id } = appId;
+        const resp = await (
+            await this.getCollection(this.collectionName)
+        ).deleteOne({ _id: ObjectId.createFromHexString(id) });
+        return Boolean(resp.deletedCount);
+    }
+
+    /**
+     * Creates an application document.
+     * @param {Application} app - application payload to insert
+     * @returns {Promise<object>} inserted Mongo identifier
+     */
+    async create(app: Application): Promise<object> {
+        const now = new Date().toISOString();
+        const resp = await (
+            await this.getCollection<Application>(this.collectionName)
+        ).insertOne({ ...app, createdAt: now, updatedAt: now });
+        return resp.insertedId;
+    }
+
+    /**
+     * Deletes all application documents.
+     * @returns {Promise<number>} number of removed application documents
+     */
+    async deleteAll(): Promise<number> {
+        const resp = await (await this.getCollection(this.collectionName)).deleteMany({});
+        return resp.deletedCount;
+    }
+
+    /**
+     * Initializes the applications collection and seeds sample data when appropriate.
+     * @returns {Promise<void>}
+     */
+    async initDb() {
+        await this.createCollectionIfNotExists();
+        await this.populateIfEmpty();
+    }
+
+    /**
+     * Builds the Mongo query used for filtered application searches.
+     * @param {object} filters - incoming filter values
+     * @returns {object} Mongo query document
+     */
+    private static buildFiltersQuery(filters: ApplicationFilters): Record<string, unknown> {
+        let query: Record<string, unknown> = {};
+
+        if (filters.id) {
+            query._id = ObjectId.createFromHexString(filters.id);
+        }
         if (filters.status) {
             query.currentStatus = filters.status;
         }
@@ -92,56 +191,61 @@ export default class MongoApplicationRepository
                 { description: { $regex: filters.search, $options: 'i' } },
             ];
         }
+        if (filters.ownerEmail) {
+            query = MongoApplicationRepository.applyOwnerEmailFilter(query, filters.ownerEmail);
+        }
 
-        const apps = await (await this.getCollection<Application>(this.collectionName))
-            .find(query)
-            .toArray();
-
-        return apps.map((app: Application & MongoDbId) => {
-            const id = String(app._id);
-            // eslint-disable-next-line no-param-reassign
-            delete app._id;
-            return { ...app, id };
-        });
+        return query;
     }
 
-    async updateOne(appId, entity: Application): Promise<number> {
-        const { _id: id } = appId;
-        const resp = await (
-            await this.getCollection(this.collectionName)
-        ).findOneAndReplace(
-            { _id: ObjectId.createFromHexString(id) },
-            { ...entity, updatedAt: new Date().toISOString() }
-        );
-        return resp?._id ? 1 : 0;
+    /**
+     * Applies owner-email filtering to a Mongo query.
+     * @param {object} query - base Mongo query object
+     * @param {string} ownerEmail - owner email to match case-insensitively
+     * @returns {object} query including owner-email filtering
+     */
+    private static applyOwnerEmailFilter(
+        query: Record<string, unknown>,
+        ownerEmail: string
+    ): Record<string, unknown> {
+        const ownerEmailQuery = {
+            $or: [
+                { itOwnerEmail: { $regex: `^${ownerEmail}$`, $options: 'i' } },
+                { portfolioOwnerEmail: { $regex: `^${ownerEmail}$`, $options: 'i' } },
+            ],
+        };
+
+        if (query.$or) {
+            const { $or: existingOr, ...remainingQuery } = query;
+
+            return {
+                ...remainingQuery,
+                $and: [{ $or: existingOr as unknown[] }, ownerEmailQuery],
+            };
+        }
+
+        return {
+            ...query,
+            ...ownerEmailQuery,
+        };
     }
 
-    async deleteOne(appId): Promise<boolean> {
-        const { _id: id } = appId;
-        const resp = await (
-            await this.getCollection(this.collectionName)
-        ).deleteOne({ _id: ObjectId.createFromHexString(id) });
-        return Boolean(resp.deletedCount);
+    /**
+     * Converts a Mongo application document into the API response shape.
+     * @param {Application & MongoDbId} app - Mongo application document
+     * @returns {Application} normalized application payload
+     */
+    private static toApplication(app: Application & MongoDbId): Application {
+        const id = String(app._id);
+        const application = { ...app };
+        delete application._id;
+        return { ...application, id };
     }
 
-    async create(app: Application): Promise<object> {
-        const now = new Date().toISOString();
-        const resp = await (
-            await this.getCollection<Application>(this.collectionName)
-        ).insertOne({ ...app, createdAt: now, updatedAt: now });
-        return resp.insertedId;
-    }
-
-    async deleteAll(): Promise<number> {
-        const resp = await (await this.getCollection(this.collectionName)).deleteMany({});
-        return resp.deletedCount;
-    }
-
-    async initDb() {
-        await this.createCollectionIfNotExists();
-        await this.populateIfEmpty();
-    }
-
+    /**
+     * Creates the applications collection if it does not already exist.
+     * @returns {Promise<void>}
+     */
     private async createCollectionIfNotExists() {
         const collections = await this.database.listCollections().toArray();
         const exists = collections.find((c) => c.name === this.collectionName);
@@ -152,11 +256,23 @@ export default class MongoApplicationRepository
         }
     }
 
+    /**
+     * Seeds the applications collection when empty and sample data is allowed.
+     * @returns {Promise<void>}
+     */
     private async populateIfEmpty() {
         const collection = await this.getCollection<Application>(this.collectionName);
         const count = await collection.countDocuments();
+        const useRealData = process.env.USE_REAL_DATA === 'true';
 
         if (count === 0) {
+            if (useRealData) {
+                this.logger.info(
+                    `[${this.collectionName}] is empty while USE_REAL_DATA=true; skipping sample-data seed`
+                );
+                return;
+            }
+
             this.logger.info(`Seeding [${this.collectionName}] with sample data`);
             await collection.insertMany(SEED_APPLICATIONS as Application[]);
         }

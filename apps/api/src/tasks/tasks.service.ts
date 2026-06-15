@@ -17,9 +17,8 @@ import { TaskRepository } from './task.repository';
 @Injectable()
 export default class TasksService {
     /**
-     * @param {Logger} logger - An instance of the Logger class.
-     * @param {TaskRepository} taskRepository - An instance of the TaskRepository class that is injected using the @Inject decorator.
-     * This is used to interact with the task repository and perform CRUD operations. The string 'TaskRepository' is the token that will be used to look up the dependency in the providers array.
+     * @param {object} logger - logger used for task service diagnostics
+     * @param {object} taskRepository - repository dependency used for task CRUD operations
      */
     constructor(
         private logger: Logger,
@@ -28,8 +27,8 @@ export default class TasksService {
 
     /**
      * Creates a new task based upon the provided create task request.
-     * @param {CreateTaskRequest} createTask The object representing the task to be created.
-     * @returns {Promise<string>}  A promise containing a string representing the ID of the newly created task.
+     * @param {object} createTask - object representing the task to be created
+     * @returns {Promise<string>} a promise containing the identifier of the newly created task
      */
     async create(createTask: CreateTaskRequest): Promise<string> {
         try {
@@ -49,7 +48,7 @@ export default class TasksService {
 
     /**
      * Retrieves all tasks.
-     * @returns {Promise<TaskDto[]>} A promise containing an array of all tasks.
+     * @returns {Promise<object[]>} a promise containing all stored tasks
      */
     async findAll(): Promise<TaskDto[]> {
         let dataModelTasks;
@@ -67,8 +66,8 @@ export default class TasksService {
 
     /**
      * Retrieves the task with the provided ID.
-     * @param {string} id The ID of the task to find.
-     * @returns {Promise<TaskDto>} A promise containing the retrieved task.
+     * @param {string} id - identifier of the task to find
+     * @returns {Promise<object>} a promise containing the retrieved task
      */
     async findOne(id: string): Promise<TaskDto> {
         if (!id) {
@@ -100,8 +99,9 @@ export default class TasksService {
 
     /**
      * Updates the task with the provided ID to match the provided update task.
-     * @param {string} id The ID of the task to update.
-     * @param {UpdateTaskRequest} updateTask The updated version of the task.
+     * @param {string} id - identifier of the task to update
+     * @param {object} updateTask - updated version of the task
+     * @returns {Promise<void>} resolves when the task update completes
      */
     async update(id: string, updateTask: UpdateTaskRequest): Promise<void> {
         if (id !== updateTask.id) {

@@ -5,7 +5,7 @@ const createApp = (
     name: string,
     health: PortfolioApp['health'],
     perception: PortfolioApp['perception'],
-    uptime: number,
+    uptime: number | null,
     users: number,
     incidents: number,
     lastIncident: string
@@ -16,6 +16,9 @@ const createApp = (
     perception,
     uptime,
     users,
+    totalInternalUsers: users,
+    totalExternalUsers: 0,
+    activeUsers: users,
     incidents,
     lastIncident,
 });

@@ -3,9 +3,9 @@ import { DashboardDetailResponse } from '@operational-dashboard/shared-api-model
 import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
 
 export interface PortfolioRepository {
-    getPortfolio(): Promise<PortfolioNode>;
+    getPortfolio(userEmail?: string): Promise<PortfolioNode>;
 
-    getAppContext(appId: string): Promise<PortfolioAppContext | null>;
+    getAppContext(appId: string, userEmail?: string): Promise<PortfolioAppContext | null>;
 
-    getAppDetail(appId: string): Promise<DashboardDetailResponse | null>;
+    getAppDetail(appId: string, userEmail?: string): Promise<DashboardDetailResponse | null>;
 }

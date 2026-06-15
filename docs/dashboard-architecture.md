@@ -42,6 +42,43 @@
 - No Redis cache layer (adequate at prototype scale)
 - No external integration adapters (mock/seed data only)
 
+### Target Production Data Sources
+
+| Domain | Source System | Notes |
+| ------ | ------------- | ----- |
+| Portfolio hierarchy, TPM ownership, application catalog | PlanView EA | System of record from the CAI application export; normalized and filtered to `Status = In Production` for the first live dashboard pass |
+| Application health | Datadog | Primary source for monitor, synthetic, APM, and optional RUM telemetry |
+| Container health | app.komodor.com | Primary source for Kubernetes and container runtime health |
+| Incident ticketing | ServiceNow | Ticketing system for incident lifecycle and operational updates |
+| Collaboration alerts | Microsoft Teams | Primary collaboration channel for incident notifications and status broadcasts |
+
+### Observed PlanView Export Contract
+
+The current seed export at `db/PlanviewData_Dremio_CAI_Applications.json` contains 8,519 rows and 80 fields. The file is not valid JSON as stored because adjacent objects are missing commas, so the ingestion adapter must normalize `}{` into `},{` before parsing.
+
+First-pass operational scope is limited to the 2,971 rows where `Status = In Production`. `Decommissioned`, `In Development`, and `Preserved / Archived` records remain in the source catalog but should not drive live health cards until a separate lifecycle view is designed.
+
+For the first dashboard version, PlanView is used only for application metadata and ownership context:
+
+| PlanView column | Dashboard usage |
+| --------------- | --------------- |
+| `InternalID` | Canonical `applicationId` for storage and joins |
+| `ProductCode` | Immutable PlanView traceability key |
+| `CASTKey` | Preferred `shortCode` and primary Datadog correlation tag |
+| `ProductName` | Application display name |
+| `LongDescription` | Detail-panel description |
+| `BusinessDeliveryPortfolioName` | First-pass portfolio and business-unit grouping label |
+| `DrTier` | SLA tier mapping |
+| `PortfolioOwnerName`, `PortfolioOwnerEmail`, `BusinessOwner`, `ItOwner`, `ItOwnerEmail` | Ownership and contact metadata |
+| `InternalUserCount`, `ExternalUserCount` | Registered-user baseline for impact estimation, not live usage telemetry |
+| `Hosting`, `DataClassification`, `OwningOrganization` | Supporting context in detail views |
+
+The current export does not support these as primary join keys:
+
+- `CA_Application_UUID` is only partially populated and has duplicate values.
+- `ServiceNowKey` and `SN_Sys_Id` are useful for ITSM traceability, not for primary telemetry joins.
+- `TechnicalContact` and `TechnicalContactEmail` are empty in the current sample and should not be modeled yet.
+
 ---
 
 ## 2. Technology Stack
@@ -249,13 +286,33 @@ interface Application {
   id: string;
   name: string;
   shortCode: string;
+  planviewProductCode: string;
+  castKey?: string;
   description: string;
   environment: 'PRODUCTION' | 'STAGING' | 'DEVELOPMENT';
   tier: 1 | 2 | 3 | 4;
   businessUnit: string;
+  portfolioName: string;
+  lifecycleStatus: 'IN_PRODUCTION' | 'IN_DEVELOPMENT' | 'DECOMMISSIONED' | 'ARCHIVED';
   currentStatus: 'GREEN' | 'AMBER' | 'RED';
   currentUserCount: number;
+  registeredInternalUsers: number;
+  registeredExternalUsers: number;
   monitoringSource: string;
+  businessOwner?: string;
+  itOwner?: string;
+  itOwnerEmail?: string;
+  portfolioOwnerName?: string;
+  portfolioOwnerEmail?: string;
+  dataClassification?: string;
+  hosting?: string;
+  owningOrganization?: string;
+  datadogTags: {
+    castKey?: string;
+    planviewInternalId: string;
+    planviewProductCode: string;
+    environment: 'prod';
+  };
   teamId: string;
   statusOverride?: {
     status: 'GREEN' | 'AMBER' | 'RED';
@@ -267,6 +324,8 @@ interface Application {
   updatedAt: Date;
 }
 ```
+
+`currentUserCount` remains a live telemetry field sourced from Datadog RUM or another runtime signal. `registeredInternalUsers` and `registeredExternalUsers` come from PlanView and are only used as static audience context for blast-radius estimates.
 
 #### `health-status-records`
 
@@ -323,7 +382,7 @@ interface Team {
   id: string;
   name: string;
   department: string;
-  slackChannel?: string;
+  teamsChannel?: string;
   emailDistributionList?: string;
 }
 ```
@@ -394,10 +453,39 @@ Each external system will be accessed through a dedicated adapter implementing a
 
 | Adapter Interface      | Methods                                                       | Target Systems                      |
 | ---------------------- | ------------------------------------------------------------- | ----------------------------------- |
-| `IMonitoringAdapter`   | `fetchHealthStatus()`, `fetchMetrics()`, `registerWebhook()`  | Datadog, AppDynamics, Dynatrace     |
-| `IItsmAdapter`         | `createIncident()`, `updateIncident()`, `getIncidentStatus()` | ServiceNow, Jira Service Management |
+| `IPortfolioAdapter`    | `syncPortfolioHierarchy()`, `syncApplications()`, `syncOwnership()` | PlanView EA                    |
+| `IMonitoringAdapter`   | `fetchHealthStatus()`, `fetchMetrics()`, `registerWebhook()`  | Datadog, app.komodor.com            |
+| `IItsmAdapter`         | `createIncident()`, `updateIncident()`, `getIncidentStatus()` | ServiceNow                          |
 | `IDirectoryAdapter`    | `lookupUser()`, `getGroupMembership()`, `syncTeamContacts()`  | Okta, Azure AD                      |
-| `INotificationAdapter` | `sendAlert()`, `sendUpdate()`, `escalate()`                   | PagerDuty, Slack, SMTP              |
+| `INotificationAdapter` | `sendAlert()`, `sendUpdate()`, `escalate()`                   | PagerDuty, Microsoft Teams, SMTP    |
+
+### PlanView Ingestion Pipeline
+
+1. Read the PlanView CAI export and normalize the missing object separators.
+2. Filter to `Status = In Production` for the live operational dashboard.
+3. Upsert the `applications` collection keyed by `InternalID`.
+4. Persist `ProductCode` for source traceability and `CASTKey` as the preferred short code.
+5. Parse `DrTier` into the internal numeric SLA tier.
+6. Treat `BusinessDeliveryPortfolioName` as the first-pass grouping label for both portfolio and business-unit filtering until a separate hierarchy feed is available.
+
+### Datadog Correlation Contract
+
+Datadog is the main source of runtime telemetry. Every Datadog service, monitor, and synthetic check that should appear on the dashboard must expose the same application identity through tags.
+
+Required Datadog tags:
+
+- `cast_key:<CASTKey>` as the primary correlation tag
+- `planview_internal_id:<InternalID>` as the stable fallback join tag
+- `planview_product_code:<ProductCode>` as the audit and reconciliation tag
+- `env:prod` for the first-pass monitored scope
+
+Correlation order:
+
+1. Join by `cast_key`
+2. Fallback to `planview_internal_id`
+3. Use `planview_product_code` only for reconciliation or manual exception handling
+
+The dashboard should never correlate on `ProductName`. Datadog provides current health state, uptime windows, latency percentiles, error rate, open alerts, failing synthetics, and recent health events. PlanView continues to own lifecycle, tier, portfolio grouping, and ownership metadata.
 
 ---
 
@@ -632,10 +720,12 @@ Replace REST polling with WebSocket for sub-second status updates:
 
 ### External Integrations
 
+- PlanView EA: Portfolio hierarchy, TPM ownership, and application catalog sync
 - ServiceNow: Bidirectional incident ticket sync
 - PagerDuty: On-call resolution + automated paging
-- Slack/Teams: Alert broadcasting
-- Datadog/AppDynamics: Automated health check ingestion
+- Microsoft Teams: Alert broadcasting
+- Datadog: Automated application health ingestion
+- app.komodor.com: Automated container health ingestion
 
 ### Infrastructure Scaling
 

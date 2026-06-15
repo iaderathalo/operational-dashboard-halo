@@ -127,6 +127,12 @@
                                 }}
                                 Red</span
                             >
+                            <span class="u"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'health').undefined
+                                }}
+                                Undefined</span
+                            >
                         </div>
                     </div>
                     <div class="pf-summary-stat">
@@ -149,6 +155,12 @@
                                     countByStatus(getAllApps(currentNode), 'perception').red
                                 }}
                                 Critical</span
+                            >
+                            <span class="u"
+                                >{{
+                                    countByStatus(getAllApps(currentNode), 'perception').undefined
+                                }}
+                                Undefined</span
                             >
                         </div>
                     </div>
@@ -220,6 +232,10 @@
                         <span class="status-dot red"></span
                         >{{ countByStatus(getAllApps(node), 'health').red }} Red
                     </span>
+                    <span class="status-count undefined">
+                        <span class="status-dot undefined"></span
+                        >{{ countByStatus(getAllApps(node), 'health').undefined }} Undefined
+                    </span>
                 </div>
 
                 <div class="subpf-status-block">
@@ -235,6 +251,10 @@
                     <span class="status-count red">
                         <span class="status-dot red"></span
                         >{{ countByStatus(getAllApps(node), 'perception').red }} Critical
+                    </span>
+                    <span class="status-count undefined">
+                        <span class="status-dot undefined"></span
+                        >{{ countByStatus(getAllApps(node), 'perception').undefined }} Undefined
                     </span>
                 </div>
             </div>
@@ -263,7 +283,9 @@
                     <th>Health</th>
                     <th>Perception</th>
                     <th>Uptime</th>
-                    <th>Users</th>
+                    <th>Total External Users</th>
+                    <th>Total Internal Users</th>
+                    <th>Active Users</th>
                     <th>Incidents</th>
                     <th>Last Incident</th>
                 </tr>
@@ -291,10 +313,14 @@
                             }}</span>
                         </div>
                     </td>
-                    <td data-label="Uptime" [class.metric-bad]="app.uptime < 99">
-                        {{ app.uptime }}%
+                    <td data-label="Uptime" [class.metric-muted]="app.uptime === null">
+                        {{ formatUptime(app.uptime) }}
                     </td>
-                    <td data-label="Users">{{ app.users | number }}</td>
+                    <td data-label="Total External Users">{{ app.totalExternalUsers | number }}</td>
+                    <td data-label="Total Internal Users">{{ app.totalInternalUsers | number }}</td>
+                    <td data-label="Active Users" [class.metric-muted]="app.activeUsers === null">
+                        {{ formatActiveUsers(app.activeUsers) }}
+                    </td>
                     <td data-label="Incidents" [class.metric-bad]="app.incidents > 0">
                         {{ app.incidents }}
                     </td>

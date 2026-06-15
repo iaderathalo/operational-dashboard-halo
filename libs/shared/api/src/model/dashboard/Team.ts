@@ -11,7 +11,7 @@ export interface Team {
     id?: string;
     name: string;
     department: string;
-    slackChannel?: string;
+    teamsChannel?: string;
     emailDistributionList?: string;
 }
 

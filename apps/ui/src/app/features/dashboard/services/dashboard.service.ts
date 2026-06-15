@@ -1,14 +1,30 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
-import { DashboardDetailResponse } from '@operational-dashboard/shared-api-model/model/dashboard';
+import {
+    DashboardDetailChannelOption,
+    DashboardDetailNotifyOption,
+    DashboardDetailPeople,
+    DashboardDetailResponse,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
+import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
 import environment from '../../../../environments/environment';
 import { Application, DashboardSummary, Incident, Contact } from '../models/dashboard.models';
+import PORTFOLIO_DATA from '../models/portfolio.data';
 import { PortfolioAppContext, PortfolioNode } from '../models/portfolio.model';
+import {
+    createDetailView,
+    createFallbackApp,
+    findAppContext,
+    PEOPLE,
+} from '../pages/detail-page/detail-page.data';
+import DashboardDataModeService from './dashboard-data-mode.service';
 
-@Injectable()
+@Injectable({
+    providedIn: 'root',
+})
 export default class DashboardService {
     private baseUrl = environment.apiBaseUrl;
 
@@ -16,7 +32,10 @@ export default class DashboardService {
      * Creates the dashboard API client.
      * @param {object} http - HTTP client for backend requests
      */
-    constructor(private http: HttpClient) {}
+    constructor(
+        private http: HttpClient,
+        private dataModeService: DashboardDataModeService
+    ) {}
 
     /**
      * Fetches applications using optional dashboard filters.
@@ -58,6 +77,28 @@ export default class DashboardService {
      * @returns {object} dashboard summary response
      */
     getSummary(): Observable<DashboardSummary> {
+        if (this.dataModeService.currentMode === 'demo') {
+            const apps = this.getAllDemoApps();
+            const uptimeApps = apps.filter((app) => app.uptime !== null);
+            const overallUptime30d = uptimeApps.length
+                ? Number(
+                      (
+                          uptimeApps.reduce((total, app) => total + (app.uptime || 0), 0) /
+                          uptimeApps.length
+                      ).toFixed(2)
+                  )
+                : 0;
+
+            return of({
+                totalApplications: apps.length,
+                greenCount: apps.filter((app) => app.health === 'green').length,
+                amberCount: apps.filter((app) => app.health === 'amber').length,
+                redCount: apps.filter((app) => app.health === 'red').length,
+                totalActiveUsers: apps.reduce((total, app) => total + (app.activeUsers || 0), 0),
+                overallUptime30d,
+            });
+        }
+
         return this.http.get<DashboardSummary>(`${this.baseUrl}/dashboard/summary`);
     }
 
@@ -66,6 +107,10 @@ export default class DashboardService {
      * @returns {object} dashboard portfolio tree
      */
     getPortfolio(): Observable<PortfolioNode> {
+        if (this.dataModeService.currentMode === 'demo') {
+            return of(this.cloneValue(PORTFOLIO_DATA));
+        }
+
         return this.http.get<PortfolioNode>(`${this.baseUrl}/dashboard/portfolio`);
     }
 
@@ -75,6 +120,10 @@ export default class DashboardService {
      * @returns {object} application detail context
      */
     getPortfolioAppContext(id: string): Observable<PortfolioAppContext> {
+        if (this.dataModeService.currentMode === 'demo') {
+            return of(this.getDemoAppContext(id));
+        }
+
         return this.http.get<PortfolioAppContext>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}`
         );
@@ -86,6 +135,17 @@ export default class DashboardService {
      * @returns {object} detail-screen response
      */
     getPortfolioAppDetail(id: string): Observable<DashboardDetailResponse> {
+        if (this.dataModeService.currentMode === 'demo') {
+            const detailResponse: DashboardDetailResponse = {
+                view: createDetailView(
+                    this.getDemoAppContext(id)
+                ) as unknown as DashboardDetailResponse['view'],
+                people: this.getDemoPeople(),
+            };
+
+            return of(detailResponse);
+        }
+
         return this.http.get<DashboardDetailResponse>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/detail`
         );
@@ -173,5 +233,51 @@ export default class DashboardService {
         return this.http.delete<Application>(
             `${this.baseUrl}/applications/${applicationId}/status-override`
         );
+    }
+
+    private getDemoAppContext(id: string): PortfolioAppContext {
+        const portfolio = this.cloneValue(PORTFOLIO_DATA);
+        const context = findAppContext(id, portfolio);
+
+        if (context) {
+            return context;
+        }
+
+        return {
+            app: createFallbackApp(id),
+            path: [portfolio],
+        };
+    }
+
+    private getDemoPeople(): DashboardDetailPeople {
+        return {
+            currentUser: {
+                email: environment.bypassAuth ? LOCAL_DEVELOPMENT_USER.email : '',
+                initials: PEOPLE.currentUser.initials,
+                name: PEOPLE.currentUser.name,
+                role: PEOPLE.currentUser.role,
+            },
+            sev1Notify: PEOPLE.sev1Notify.map<DashboardDetailNotifyOption>((option) => ({
+                ...option,
+            })),
+            sev1Channels: PEOPLE.sev1Channels.map<DashboardDetailChannelOption>((option) => ({
+                ...option,
+            })),
+        };
+    }
+
+    private getAllDemoApps(): PortfolioAppContext['app'][] {
+        return this.collectApps(this.cloneValue(PORTFOLIO_DATA));
+    }
+
+    private collectApps(node: PortfolioNode): PortfolioAppContext['app'][] {
+        return [
+            ...(node.apps || []),
+            ...(node.children || []).flatMap((child) => this.collectApps(child)),
+        ];
+    }
+
+    private cloneValue<T>(value: T): T {
+        return JSON.parse(JSON.stringify(value)) as T;
     }
 }

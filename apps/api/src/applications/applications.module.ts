@@ -19,11 +19,14 @@ import MongoApplicationRepository from './mongo/mongo-application.repository';
                 inMemoryApplicationRepository: InMemoryApplicationRepository,
                 mongoApplicationRepository: MongoApplicationRepository
             ) => {
+                const useRealData = configService.get<string>('USE_REAL_DATA') === 'true';
                 const mongoUrl =
                     configService.get<string>('API_MONGODB_API_DB_URL') ||
                     configService.get<string>('API_MONGODB_DB_URL');
 
-                return mongoUrl ? mongoApplicationRepository : inMemoryApplicationRepository;
+                return mongoUrl && useRealData
+                    ? mongoApplicationRepository
+                    : inMemoryApplicationRepository;
             },
             inject: [ConfigService, InMemoryApplicationRepository, MongoApplicationRepository],
         },

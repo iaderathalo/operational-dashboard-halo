@@ -3,6 +3,8 @@
     "license": "MIT",
     "scripts": {
         "nx": "nx",
+        "db:load:planview:local": "node db/load-planview-applications.js",
+        "db:load:planview:dry-run": "node db/load-planview-applications.js --dry-run",
         "test": "nx run-many --target=test --all",
         "test:coverage": "nx run-many --target=test --all --codeCoverage",
         "lint": "nx workspace-lint",

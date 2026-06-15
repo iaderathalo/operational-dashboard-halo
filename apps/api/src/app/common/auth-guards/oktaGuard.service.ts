@@ -17,6 +17,7 @@ import {
     AuthenticationChannel,
     IdentityProvider,
 } from '@operational-dashboard/shared-api-model/constants/siem-logging';
+import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
 import { isWhiteListedController } from '../allowControllerWithNoBearer';
 
@@ -49,7 +50,15 @@ export default class OktaGuard implements CanActivate {
      * @returns {Promise<boolean>} - A promise that resolves to a boolean indicating whether the request is authorized.
      */
     async canActivate(context: ExecutionContext): Promise<boolean> {
+        const request = context.switchToHttp().getRequest();
+
         if (process.env.NODE_ENV !== 'production' && process.env.BYPASS_AUTH === 'true') {
+            request.user = {
+                email: LOCAL_DEVELOPMENT_USER.email,
+                name: LOCAL_DEVELOPMENT_USER.name,
+                initials: LOCAL_DEVELOPMENT_USER.initials,
+                role: LOCAL_DEVELOPMENT_USER.role,
+            };
             return true;
         }
 
@@ -69,7 +78,7 @@ export default class OktaGuard implements CanActivate {
 
                 token = this.getAuthToken(context, AUTH_HEADER_PREFIX);
 
-                this.validateOktaToken(token, resolve, reject);
+                this.validateOktaToken(token, request, resolve, reject);
             } catch (error) {
                 this.logger.siem(SiemEventName.LOGIN_FAILURE, {
                     msg: 'Authentication with the API failed.',
@@ -90,11 +99,13 @@ export default class OktaGuard implements CanActivate {
     /**
      * Validates an Okta access token using the Okta JWT verifier.
      * @param {string} token - The Okta access token to validate.
+     * @param request
      * @param {(value: boolean | PromiseLike<boolean>) => void} resolve - The function to call when the token is successfully validated.
      * @param {(reason) => void} reject - The function to call when there is an error validating the token.
      */
     private validateOktaToken(
         token: string,
+        request: Record<string, unknown>,
         resolve: (value: boolean | PromiseLike<boolean>) => void,
         reject: (reason?) => void
     ) {
@@ -114,6 +125,14 @@ export default class OktaGuard implements CanActivate {
                 // The SIEM specification dictates that the `sub` field be used.
                 const actorName = oktaResponse.claims.sub;
                 PolarisLoggerStorage.getStore().ActorName = actorName;
+
+                request.user = {
+                    email: oktaResponse.claims.email,
+                    employeeId: oktaResponse.claims.employee_id,
+                    name: oktaResponse.claims.name || oktaResponse.claims.sub,
+                    adUserName: oktaResponse.claims.ad_user_name,
+                    oktaUserId: oktaResponse.claims.okta_user_id,
+                };
 
                 this.logger.siem(SiemEventName.LOGIN_SUCCESSFUL, {
                     msg: 'Authentication with the API was successful.',

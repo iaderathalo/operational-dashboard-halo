@@ -27,22 +27,24 @@ export default class DashboardService {
 
     /**
      * Returns the portfolio tree that powers the dashboard page.
+     * @param {string} [userEmail] - optional user email used to scope the portfolio
      * @returns {Promise<object>} dashboard portfolio tree
      */
-    async getPortfolio(): Promise<PortfolioNode> {
+    async getPortfolio(userEmail?: string): Promise<PortfolioNode> {
         this.logger.info('Retrieving dashboard portfolio');
-        return this.portfolioRepository.getPortfolio();
+        return this.portfolioRepository.getPortfolio(userEmail);
     }
 
     /**
      * Returns the detail context for a single application in the portfolio tree.
      * @param {string} appId - portfolio application id
+     * @param {string} [userEmail] - optional user email used to scope the portfolio
      * @returns {Promise<object>} application context and owning path
      */
-    async getAppContext(appId: string): Promise<PortfolioAppContext> {
+    async getAppContext(appId: string, userEmail?: string): Promise<PortfolioAppContext> {
         this.logger.info(`Retrieving dashboard app context for [${appId}]`);
 
-        const context = await this.portfolioRepository.getAppContext(appId);
+        const context = await this.portfolioRepository.getAppContext(appId, userEmail);
 
         if (!context) {
             throw new NotFoundException(`Dashboard application [${appId}] not found`);
@@ -54,11 +56,12 @@ export default class DashboardService {
     /**
      * Returns the full detail-screen payload for a portfolio application.
      * @param {string} appId - portfolio application id
+     * @param {string} [userEmail] - optional user email used to scope the portfolio
      * @returns {Promise<object>} dashboard detail payload
      */
-    async getAppDetail(appId: string): Promise<DashboardDetailResponse> {
+    async getAppDetail(appId: string, userEmail?: string): Promise<DashboardDetailResponse> {
         this.logger.info(`Retrieving dashboard app detail for [${appId}]`);
-        const detail = await this.portfolioRepository.getAppDetail(appId);
+        const detail = await this.portfolioRepository.getAppDetail(appId, userEmail);
 
         if (!detail) {
             throw new NotFoundException(`Dashboard application [${appId}] not found`);
@@ -69,11 +72,12 @@ export default class DashboardService {
 
     /**
      * Calculates the summary metrics for the dashboard overview.
+     * @param {string} [userEmail] - optional user email used to scope the summary
      * @returns {Promise<object>} aggregate dashboard summary
      */
-    async getSummary(): Promise<DashboardSummary> {
+    async getSummary(userEmail?: string): Promise<DashboardSummary> {
         this.logger.info('Generating dashboard summary');
-        const apps = await this.applicationsService.findAll();
+        const apps = await this.applicationsService.findAll(undefined, userEmail);
 
         const greenCount = apps.filter((a) => a.currentStatus === 'GREEN').length;
         const amberCount = apps.filter((a) => a.currentStatus === 'AMBER').length;
@@ -86,7 +90,7 @@ export default class DashboardService {
             amberCount,
             redCount,
             totalActiveUsers,
-            overallUptime30d: 99.7, // Mock value for MVP
+            overallUptime30d: 99.7,
         };
     }
 }

@@ -4,9 +4,11 @@ import { Repository } from '../repository/repository';
 
 export interface ApplicationRepository extends Repository<Application> {
     findByFilters(filters: {
+        id?: string;
         status?: string;
         tier?: number;
         businessUnit?: string;
         search?: string;
+        ownerEmail?: string;
     }): Promise<Application[]>;
 }

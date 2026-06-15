@@ -15,22 +15,45 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
         updatedAt: new Date().toISOString(),
     }));
 
+    /**
+     *
+     * @param appId
+     */
     async findOne(appId): Promise<Application> {
         const { _id: id } = appId;
         return this.applications.find((a) => a.id === id) || null;
     }
 
+    /**
+     *
+     */
     async findAll(): Promise<Application[]> {
         return [...this.applications];
     }
 
+    /**
+     *
+     * @param filters
+     * @param filters.id
+     * @param filters.status
+     * @param filters.tier
+     * @param filters.businessUnit
+     * @param filters.search
+     * @param filters.ownerEmail
+     */
     async findByFilters(filters: {
+        id?: string;
         status?: string;
         tier?: number;
         businessUnit?: string;
         search?: string;
+        ownerEmail?: string;
     }): Promise<Application[]> {
         let result = [...this.applications];
+
+        if (filters.id) {
+            result = result.filter((a) => a.id === filters.id);
+        }
 
         if (filters.status) {
             result = result.filter((a) => a.currentStatus === filters.status);
@@ -54,6 +77,11 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
         return result;
     }
 
+    /**
+     *
+     * @param appId
+     * @param entity
+     */
     async updateOne(appId, entity: Application): Promise<number> {
         const { _id: id } = appId;
         const index = this.applications.findIndex((a) => a.id === id);
@@ -62,6 +90,10 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
         return 1;
     }
 
+    /**
+     *
+     * @param appId
+     */
     async deleteOne(appId): Promise<boolean> {
         const { _id: id } = appId;
         const index = this.applications.findIndex((a) => a.id === id);
@@ -70,6 +102,10 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
         return true;
     }
 
+    /**
+     *
+     * @param app
+     */
     async create(app: Application): Promise<string> {
         const id = uuidv4();
         this.applications.push({
@@ -81,6 +117,9 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
         return id;
     }
 
+    /**
+     *
+     */
     async deleteAll(): Promise<number> {
         const count = this.applications.length;
         this.applications = [];

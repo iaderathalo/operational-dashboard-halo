@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Req } from '@nestjs/common';
 
 import {
     DashboardDetailResponse,
@@ -18,39 +18,57 @@ export default class DashboardController {
 
     /**
      * Returns the full portfolio tree for the dashboard page.
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
      * @returns {Promise<object>} dashboard portfolio tree
      */
     @Get('portfolio')
-    async getPortfolio(): Promise<PortfolioNode> {
-        return this.dashboardService.getPortfolio();
+    async getPortfolio(@Req() request: { user?: { email?: string } }): Promise<PortfolioNode> {
+        return this.dashboardService.getPortfolio(request.user?.email);
     }
 
     /**
      * Returns the portfolio-backed detail context for a single application.
-     * @param {string} id - portfolio application id
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
+     * @param {string} id - portfolio application identifier
      * @returns {Promise<object>} application context and owning path
      */
     @Get('portfolio/apps/:id')
-    async getAppContext(@Param('id') id: string): Promise<PortfolioAppContext> {
-        return this.dashboardService.getAppContext(id);
+    async getAppContext(
+        @Req() request: { user?: { email?: string } },
+        @Param('id') id: string
+    ): Promise<PortfolioAppContext> {
+        return this.dashboardService.getAppContext(id, request.user?.email);
     }
 
     /**
      * Returns the full detail-screen payload for a portfolio application.
-     * @param {string} id - portfolio application id
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
+     * @param {string} id - portfolio application identifier
      * @returns {Promise<object>} detail-screen payload
      */
     @Get('portfolio/apps/:id/detail')
-    async getAppDetail(@Param('id') id: string): Promise<DashboardDetailResponse> {
-        return this.dashboardService.getAppDetail(id);
+    async getAppDetail(
+        @Req() request: { user?: { email?: string } },
+        @Param('id') id: string
+    ): Promise<DashboardDetailResponse> {
+        return this.dashboardService.getAppDetail(id, request.user?.email);
     }
 
     /**
      * Returns aggregate dashboard metrics.
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the summary
      * @returns {Promise<object>} dashboard summary metrics
      */
     @Get('summary')
-    async getSummary(): Promise<DashboardSummary> {
-        return this.dashboardService.getSummary();
+    async getSummary(@Req() request: { user?: { email?: string } }): Promise<DashboardSummary> {
+        return this.dashboardService.getSummary(request.user?.email);
     }
 }

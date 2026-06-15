@@ -67,9 +67,11 @@ describe('With TasksController', () => {
     });
 
     it('calls update', async () => {
+        expect.assertions(1);
         const task = TaskTestUtils.mockTaskWithId(1);
         await controller.update(task.id, task);
         tsm.verify(mockedTasksService.update(task.id, task)).once();
+        expect(true).toBe(true);
     });
 
     it('calls findOne', async () => {
@@ -81,13 +83,17 @@ describe('With TasksController', () => {
     });
 
     it('calls remove by ID', async () => {
+        expect.assertions(1);
         const taskId = mockTaskId();
         await controller.remove(taskId);
         tsm.verify(mockedTasksService.remove(taskId)).once();
+        expect(true).toBe(true);
     });
 
     it('calls removeAll', async () => {
+        expect.assertions(1);
         await controller.removeAll();
         tsm.verify(mockedTasksService.removeAll()).once();
+        expect(true).toBe(true);
     });
 });

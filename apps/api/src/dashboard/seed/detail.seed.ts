@@ -1,6 +1,8 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 import {
+    DashboardDetailContactEntry,
+    DashboardDetailContacts,
     DashboardDetailPeople,
     DashboardDetailResponse,
     DashboardDetailStatus,
@@ -30,12 +32,14 @@ const HEADER_HEALTH_LABELS: Record<DashboardDetailStatus, string> = {
     green: 'Healthy',
     amber: 'Degraded',
     red: 'Critical',
+    undefined: 'Undefined',
 };
 
 const HEADER_PERCEPTION_LABELS: Record<DashboardDetailStatus, string> = {
     green: 'Experience Stable',
     amber: 'Perception Slow',
     red: 'Perception Critical',
+    undefined: 'Perception Undefined',
 };
 
 const USERS_TIMELINE = [
@@ -202,7 +206,7 @@ const PEOPLE: DashboardDetailPeople = {
         { name: 'S. Patel', role: 'CIO (executive escalation)', checked: false },
     ],
     sev1Channels: [
-        { label: 'Slack: #incident-response', checked: true },
+        { label: 'Microsoft Teams: Incident Response', checked: true },
         { label: 'PagerDuty: CRM Escalation Policy', checked: true },
         { label: 'Email: crm-stakeholders@corp.com', checked: true },
         { label: 'SMS blast to extended team', checked: false },
@@ -361,6 +365,86 @@ const createOverviewMetrics = (
 ];
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const UNDEFINED_TEXT = 'Undefined';
+const TBD_TEXT = 'TBD';
+
+const getText = (value?: string | null): string => String(value || '').trim();
+
+const getDisplayText = (value?: string | null, fallback = UNDEFINED_TEXT): string => {
+    const text = getText(value);
+
+    return text || fallback;
+};
+
+const getOptionalText = (value?: string | null): string | undefined => {
+    const text = getText(value);
+
+    return text || undefined;
+};
+
+const createContactEntry = (
+    label: string,
+    value?: string | null,
+    secondary?: string | null,
+    missingSecondaryText?: string
+): DashboardDetailContactEntry => {
+    const normalizedValue = getDisplayText(value);
+    const normalizedSecondary = getOptionalText(secondary);
+
+    return {
+        label,
+        value: normalizedValue,
+        ...(normalizedSecondary || (missingSecondaryText && normalizedValue !== UNDEFINED_TEXT)
+            ? {
+                  secondary: normalizedSecondary || missingSecondaryText,
+              }
+            : {}),
+    };
+};
+
+const createDashboardContacts = (app: PortfolioAppContext['app']): DashboardDetailContacts => ({
+    amsSupport: [
+        { label: 'Maintenance', value: getDisplayText(app.amsSupport?.maintenance) },
+        {
+            label: 'Application Engineering',
+            value: getDisplayText(app.amsSupport?.applicationEngineering),
+        },
+        {
+            label: 'Application Support',
+            value: getDisplayText(app.amsSupport?.applicationSupport),
+        },
+        {
+            label: 'Database Services',
+            value: getDisplayText(app.amsSupport?.databaseServices),
+        },
+        { label: 'IT Controls', value: getDisplayText(app.amsSupport?.itControls) },
+    ],
+    escalationPath: UNDEFINED_TEXT,
+    team: [
+        createContactEntry(
+            'Portfolio Owner',
+            app.portfolioOwnerName,
+            app.portfolioOwnerEmail,
+            'Email unavailable'
+        ),
+        createContactEntry(
+            'Technical Contact',
+            app.technicalContact,
+            app.technicalContactEmail,
+            'Email unavailable'
+        ),
+        createContactEntry('POD Name', app.podName),
+        createContactEntry('POD Lead', app.podLead, app.podLeadEmail, 'Email unavailable'),
+        createContactEntry('IT Owner', app.itOwner, app.itOwnerEmail, 'Email unavailable'),
+        createContactEntry(
+            'Business Owner',
+            app.businessOwner,
+            app.businessOwnerEmail,
+            'Email unavailable'
+        ),
+    ],
+});
 
 /**
  * Creates the full dashboard detail payload returned to the UI.
@@ -549,7 +633,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
                         text: 'Update: Identified query plan regression. Testing forced plan rebuild.',
                     },
                 ],
-                actions: ['View in ITSM', 'Add Update'],
+                actions: ['Open in ServiceNow', 'Add Update'],
             },
             {
                 dateHeader: 'March 1, 2026',
@@ -591,32 +675,11 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
                 actions: [],
             },
         ],
-        contacts: {
-            onCall: [
-                { initials: 'MR', name: 'M. Rivera', role: 'Primary On-Call · SRE' },
-                { initials: 'AF', name: 'A. Fernandez', role: 'Secondary On-Call · SRE Lead' },
-            ],
-            onCallRotation: 'Weekly · Next handoff: Mon Mar 09 09:00 UTC',
-            escalation: [
-                { initials: 'L1', name: 'L. Chen', role: 'IT Ops Manager' },
-                { initials: 'L2', name: 'M. Johansson', role: 'VP Infrastructure' },
-                { initials: 'L3', name: 'S. Patel', role: 'CIO' },
-            ],
-            team: [
-                {
-                    initials: 'DT',
-                    name: scope?.owner || 'D. Thompson',
-                    role: `${scope?.role || 'App Owner'} · Application Owner`,
-                },
-                { initials: 'PG', name: 'P. Gupta', role: 'Tech Lead · Sr. Engineer' },
-                { initials: 'KW', name: 'K. Williams', role: 'DBA · Database Engineer' },
-            ],
-        },
+        contacts: createDashboardContacts(app),
         shared: {
-            slack: '#usconsulting-ops',
-            email: 'support@corp.com',
-            noc: '+1 (555) 000-9999',
-            vendor: `${scope?.name || 'Application Support'} · 1-800-NO-SFTWRE`,
+            teamsChannel: TBD_TEXT,
+            email: TBD_TEXT,
+            vendor: TBD_TEXT,
         },
         aiTokens: {
             status: 'amber',
@@ -861,11 +924,11 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             pollInterval: 60,
             notificationPreferences: [
                 {
-                    label: 'Perception transitions (G→A, A→R) — Slack #usconsulting-ops',
+                    label: 'Perception transitions (G→A, A→R) — Microsoft Teams: US Consulting Ops',
                     checked: true,
                 },
                 { label: 'Perception RED — PagerDuty escalation', checked: true },
-                { label: 'Health transitions — PagerDuty + Slack', checked: true },
+                { label: 'Health transitions — PagerDuty + Microsoft Teams', checked: true },
                 { label: 'Perception threshold warnings (approaching AMBER)', checked: false },
                 { label: 'Daily perception summary email to app owner', checked: true },
             ],

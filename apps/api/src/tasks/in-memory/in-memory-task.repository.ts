@@ -22,15 +22,27 @@ export default class InMemoryTaskRepository implements TaskRepository {
         },
     ];
 
+    /**
+     *
+     * @param idObj
+     */
     async findOne(idObj: object): Promise<Task> {
         const { _id: id } = idObj as { _id: string };
         return this.tasks.find((t) => t.id === id) || null;
     }
 
+    /**
+     *
+     */
     async findAll(): Promise<Task[]> {
         return [...this.tasks];
     }
 
+    /**
+     *
+     * @param idObj
+     * @param entity
+     */
     async updateOne(idObj: object, entity: Task): Promise<number> {
         const { _id: id } = idObj as { _id: string };
         const index = this.tasks.findIndex((t) => t.id === id);
@@ -39,6 +51,10 @@ export default class InMemoryTaskRepository implements TaskRepository {
         return 1;
     }
 
+    /**
+     *
+     * @param idObj
+     */
     async deleteOne(idObj: object): Promise<boolean> {
         const { _id: id } = idObj as { _id: string };
         const index = this.tasks.findIndex((t) => t.id === id);
@@ -47,12 +63,19 @@ export default class InMemoryTaskRepository implements TaskRepository {
         return true;
     }
 
+    /**
+     *
+     * @param entity
+     */
     async create(entity: Task): Promise<string> {
         const id = uuidv4();
         this.tasks.push({ ...entity, id });
         return id;
     }
 
+    /**
+     *
+     */
     async deleteAll(): Promise<number> {
         const count = this.tasks.length;
         this.tasks = [];

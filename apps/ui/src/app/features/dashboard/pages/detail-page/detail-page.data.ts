@@ -38,24 +38,28 @@ export const HEALTH_STATUS_LABELS: Record<PortfolioApp['health'], string> = {
     green: 'GREEN',
     amber: 'AMBER',
     red: 'RED',
+    undefined: 'UNDEFINED',
 };
 
 export const PERCEPTION_STATUS_LABELS: Record<PortfolioApp['perception'], string> = {
     green: 'GREEN',
     amber: 'AMBER',
     red: 'CRITICAL',
+    undefined: 'UNDEFINED',
 };
 
 const HEADER_HEALTH_LABELS: Record<PortfolioApp['health'], string> = {
     green: 'Healthy',
     amber: 'Degraded',
     red: 'Critical',
+    undefined: 'Undefined',
 };
 
 const HEADER_PERCEPTION_LABELS: Record<PortfolioApp['perception'], string> = {
     green: 'Experience Stable',
     amber: 'Perception Slow',
     red: 'Perception Critical',
+    undefined: 'Perception Undefined',
 };
 
 const USERS_TIMELINE = [
@@ -306,7 +310,7 @@ export const PEOPLE = {
         { name: 'S. Patel', role: 'CIO (executive escalation)', checked: false },
     ],
     sev1Channels: [
-        { label: 'Slack: #incident-response', checked: true },
+        { label: 'Microsoft Teams: Incident Response', checked: true },
         { label: 'PagerDuty: CRM Escalation Policy', checked: true },
         { label: 'Email: crm-stakeholders@corp.com', checked: true },
         { label: 'SMS blast to extended team', checked: false },
@@ -416,15 +420,23 @@ const DETAIL_TEMPLATE = {
     activityLog: [
         {
             time: '15:00',
-            color: 'amber',
+            color: 'amber' as const,
             text: 'Perception: Report Generation response time at 6x baseline',
         },
-        { time: '14:45', color: 'amber', text: 'Perception changed GREEN → AMBER' },
-        { time: '14:30', color: 'accent', text: 'Feature health poll completed (5 features)' },
-        { time: '14:15', color: 'green', text: 'Health check: all 7 checks passing' },
-        { time: '14:00', color: 'grey', text: 'User count: 3,812 (peak today: 4,102)' },
-        { time: '12:00', color: 'green', text: 'Scheduled maintenance window completed' },
-        { time: '09:00', color: 'grey', text: 'On-call handoff: M. Rivera → T. Okonkwo' },
+        { time: '14:45', color: 'amber' as const, text: 'Perception changed GREEN → AMBER' },
+        {
+            time: '14:30',
+            color: 'accent' as const,
+            text: 'Feature health poll completed (5 features)',
+        },
+        { time: '14:15', color: 'green' as const, text: 'Health check: all 7 checks passing' },
+        { time: '14:00', color: 'grey' as const, text: 'User count: 3,812 (peak today: 4,102)' },
+        {
+            time: '12:00',
+            color: 'green' as const,
+            text: 'Scheduled maintenance window completed',
+        },
+        { time: '09:00', color: 'grey' as const, text: 'On-call handoff: M. Rivera → T. Okonkwo' },
     ],
     incidentMetricCards: [
         {
@@ -469,7 +481,7 @@ const DETAIL_TEMPLATE = {
                     text: 'Update: Identified query plan regression. Testing forced plan rebuild.',
                 },
             ],
-            actions: ['View in ITSM', 'Add Update'],
+            actions: ['Open in ServiceNow', 'Add Update'],
         },
         {
             dateHeader: 'March 1, 2026',
@@ -510,16 +522,47 @@ const DETAIL_TEMPLATE = {
         },
     ],
     contacts: {
-        onCall: PEOPLE.onCall,
-        onCallRotation: PEOPLE.onCallRotation,
-        escalation: PEOPLE.escalation,
-        team: PEOPLE.team,
+        amsSupport: [
+            { label: 'Maintenance', value: 'Managed by AMS (SS)' },
+            { label: 'Application Engineering', value: 'Managed by AMS' },
+            { label: 'Application Support', value: 'Managed by AMS' },
+            { label: 'Database Services', value: 'Managed by AMS' },
+            { label: 'IT Controls', value: 'Managed by BU' },
+        ],
+        escalationPath: 'Undefined',
+        team: [
+            {
+                label: 'Portfolio Owner',
+                value: 'Anton Novikov',
+                secondary: 'anton.novikov02@marsh.com',
+            },
+            {
+                label: 'Technical Contact',
+                value: 'Taylor Okonkwo',
+                secondary: 'taylor.okonkwo@marsh.com',
+            },
+            { label: 'POD Name', value: 'FIBER Core Delivery' },
+            {
+                label: 'POD Lead',
+                value: 'Priya Gupta',
+                secondary: 'priya.gupta@marsh.com',
+            },
+            {
+                label: 'IT Owner',
+                value: 'Anton Novikov',
+                secondary: 'anton.novikov02@marsh.com',
+            },
+            {
+                label: 'Business Owner',
+                value: 'Jorie Blackwell',
+                secondary: 'Email unavailable',
+            },
+        ],
     },
     shared: {
-        slack: '#usconsulting-ops',
-        email: 'support@corp.com',
-        noc: '+1 (555) 000-9999',
-        vendor: 'US Consulting · 1-800-NO-SFTWRE',
+        teamsChannel: 'TBD',
+        email: 'TBD',
+        vendor: 'TBD',
     },
     aiTokens: {
         status: 'amber' as PortfolioApp['health'],
@@ -778,9 +821,12 @@ const DETAIL_TEMPLATE = {
         endpoint: 'https://salesforce.corp.com/ops/feature-health',
         pollInterval: 60,
         notificationPreferences: [
-            { label: 'Perception transitions (G→A, A→R) — Slack #usconsulting-ops', checked: true },
+            {
+                label: 'Perception transitions (G→A, A→R) — Microsoft Teams: US Consulting Ops',
+                checked: true,
+            },
             { label: 'Perception RED — PagerDuty escalation', checked: true },
-            { label: 'Health transitions — PagerDuty + Slack', checked: true },
+            { label: 'Health transitions — PagerDuty + Microsoft Teams', checked: true },
             { label: 'Perception threshold warnings (approaching AMBER)', checked: false },
             { label: 'Daily perception summary email to app owner', checked: true },
         ],
@@ -829,10 +875,13 @@ export const findAppContext = (
 export const createFallbackApp = (id: string): PortfolioApp => ({
     id,
     name: 'Unknown Application',
-    health: 'green',
-    perception: 'green',
-    uptime: 99.9,
+    health: 'undefined',
+    perception: 'undefined',
+    uptime: null,
     users: 0,
+    totalInternalUsers: 0,
+    totalExternalUsers: 0,
+    activeUsers: null,
     incidents: 0,
     lastIncident: 'N/A',
 });
@@ -854,7 +903,7 @@ const resolveTier = (app: PortfolioApp | undefined): number => {
         return DETAIL_TEMPLATE.tier;
     }
 
-    return app.uptime >= 99.95 ? 1 : 2;
+    return app.uptime !== null && app.uptime >= 99.95 ? 1 : 2;
 };
 
 const createOverviewMetrics = (
@@ -927,9 +976,13 @@ export const createDetailView = (context: PortfolioAppContext | null) => {
     const scope = context?.path[context.path.length - 1];
     const health = app?.health || DETAIL_TEMPLATE.health;
     const perception = app?.perception || DETAIL_TEMPLATE.perception;
-    const usersValue = app ? app.users.toLocaleString() : DETAIL_TEMPLATE.activeUsers.value;
+    const usersValue =
+        app?.activeUsers !== null && app?.activeUsers !== undefined
+            ? app.activeUsers.toLocaleString()
+            : 'Undefined';
     const incidentCount = app?.incidents ?? DETAIL_TEMPLATE.openIncidents.count;
-    const uptimeValue = app ? `${app.uptime}%` : DETAIL_TEMPLATE.uptime.value;
+    const uptimeValue =
+        app?.uptime !== null && app?.uptime !== undefined ? `${app.uptime}%` : 'Undefined';
     const activeDriftModels = DETAIL_TEMPLATE.aiDrift.models.filter(
         (model) => model.status !== 'green'
     ).length;

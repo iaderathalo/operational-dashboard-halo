@@ -10,10 +10,13 @@ export interface PortfolioNode {
 export interface PortfolioApp {
     id: string;
     name: string;
-    health: 'green' | 'amber' | 'red';
-    perception: 'green' | 'amber' | 'red';
-    uptime: number;
+    health: 'green' | 'amber' | 'red' | 'undefined';
+    perception: 'green' | 'amber' | 'red' | 'undefined';
+    uptime: number | null;
     users: number;
+    totalInternalUsers: number;
+    totalExternalUsers: number;
+    activeUsers: number | null;
     incidents: number;
     lastIncident: string;
 }
@@ -27,4 +30,5 @@ export interface StatusCounts {
     green: number;
     amber: number;
     red: number;
+    undefined: number;
 }

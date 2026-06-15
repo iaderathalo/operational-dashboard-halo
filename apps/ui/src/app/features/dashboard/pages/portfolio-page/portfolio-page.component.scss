@@ -195,6 +195,10 @@
     &.red {
         background: var(--red);
     }
+
+    &.undefined {
+        background: var(--grey);
+    }
 }
 
 .tree-label {
@@ -376,6 +380,10 @@
         .r {
             color: var(--red);
         }
+
+        .u {
+            color: var(--grey);
+        }
     }
 }
 
@@ -403,6 +411,10 @@
     &.red {
         background: var(--red);
     }
+
+    &.undefined {
+        background: var(--grey);
+    }
 }
 
 .status-text {
@@ -416,6 +428,10 @@
 
     &.red {
         color: var(--red);
+    }
+
+    &.undefined {
+        color: var(--grey);
     }
 }
 
@@ -489,6 +505,11 @@
 .metric-bad {
     font-weight: 700;
     color: var(--red);
+}
+
+.metric-muted {
+    font-weight: 600;
+    color: var(--grey);
 }
 
 .subpf-section {
@@ -585,6 +606,10 @@
 
     &.red {
         color: var(--red);
+    }
+
+    &.undefined {
+        color: var(--grey);
     }
 }
 

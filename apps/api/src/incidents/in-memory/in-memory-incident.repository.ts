@@ -13,17 +13,34 @@ export default class InMemoryIncidentRepository implements IncidentRepository {
         id: uuidv4(),
     }));
 
+    /**
+     * Finds a single incident by identifier.
+     * @param {{ _id: string }} incidentId - wrapped incident identifier
+     * @returns {Promise<object>} matching incident, if found
+     */
     async findOne(incidentId): Promise<Incident> {
         const { _id: id } = incidentId;
         return this.incidents.find((i) => i.id === id) || null;
     }
 
+    /**
+     * Returns all incidents ordered by open time descending.
+     * @returns {Promise<object[]>} all stored incidents
+     */
     async findAll(): Promise<Incident[]> {
         return [...this.incidents].sort(
             (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
         );
     }
 
+    /**
+     * Returns incidents that match the provided filter set.
+     * @param {object} filters - incident filter values
+     * @param {string} [filters.status] - optional incident status filter
+     * @param {string} [filters.severity] - optional incident severity filter
+     * @param {string} [filters.applicationId] - optional application identifier filter
+     * @returns {Promise<object[]>} matching incidents
+     */
     async findByFilters(filters: {
         status?: string;
         severity?: string;
@@ -46,6 +63,11 @@ export default class InMemoryIncidentRepository implements IncidentRepository {
         );
     }
 
+    /**
+     * Returns active incidents for an application.
+     * @param {string} applicationId - application identifier
+     * @returns {Promise<object[]>} active incidents for the application
+     */
     async findActiveByApplicationId(applicationId: string): Promise<Incident[]> {
         return this.incidents.filter(
             (i) =>
@@ -55,6 +77,12 @@ export default class InMemoryIncidentRepository implements IncidentRepository {
         );
     }
 
+    /**
+     * Replaces an existing incident record.
+     * @param {{ _id: string }} incidentId - wrapped incident identifier
+     * @param {object} entity - replacement incident payload
+     * @returns {Promise<number>} 1 when the incident was updated, otherwise 0
+     */
     async updateOne(incidentId, entity: Incident): Promise<number> {
         const { _id: id } = incidentId;
         const index = this.incidents.findIndex((i) => i.id === id);
@@ -63,6 +91,11 @@ export default class InMemoryIncidentRepository implements IncidentRepository {
         return 1;
     }
 
+    /**
+     * Deletes an incident record by identifier.
+     * @param {{ _id: string }} incidentId - wrapped incident identifier
+     * @returns {Promise<boolean>} true when the incident was deleted
+     */
     async deleteOne(incidentId): Promise<boolean> {
         const { _id: id } = incidentId;
         const index = this.incidents.findIndex((i) => i.id === id);
@@ -71,12 +104,21 @@ export default class InMemoryIncidentRepository implements IncidentRepository {
         return true;
     }
 
+    /**
+     * Creates an incident record.
+     * @param {object} incident - incident payload to create
+     * @returns {Promise<string>} generated incident identifier
+     */
     async create(incident: Incident): Promise<string> {
         const id = uuidv4();
         this.incidents.push({ ...incident, id });
         return id;
     }
 
+    /**
+     * Deletes all incident records.
+     * @returns {Promise<number>} number of removed incidents
+     */
     async deleteAll(): Promise<number> {
         const count = this.incidents.length;
         this.incidents = [];

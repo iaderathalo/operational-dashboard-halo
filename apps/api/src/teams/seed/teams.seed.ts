@@ -4,37 +4,37 @@ export const SEED_TEAMS: Omit<Team, 'id'>[] = [
     {
         name: 'Finance & Ops Team',
         department: 'Finance & Operations',
-        slackChannel: '#finance-ops-support',
+        teamsChannel: 'Finance Ops Support',
         emailDistributionList: 'finance-ops@company.com',
     },
     {
         name: 'HR Systems Team',
         department: 'Human Resources',
-        slackChannel: '#hr-systems',
+        teamsChannel: 'HR Systems',
         emailDistributionList: 'hr-systems@company.com',
     },
     {
         name: 'Sales Tech Team',
         department: 'Sales & Marketing',
-        slackChannel: '#sales-tech',
+        teamsChannel: 'Sales Tech',
         emailDistributionList: 'sales-tech@company.com',
     },
     {
         name: 'IT Operations Team',
         department: 'IT Operations',
-        slackChannel: '#it-ops',
+        teamsChannel: 'IT Operations',
         emailDistributionList: 'it-ops@company.com',
     },
     {
         name: 'Enterprise Services Team',
         department: 'Enterprise Services',
-        slackChannel: '#enterprise-svc',
+        teamsChannel: 'Enterprise Services',
         emailDistributionList: 'enterprise-svc@company.com',
     },
     {
         name: 'Engineering Team',
         department: 'Engineering',
-        slackChannel: '#engineering',
+        teamsChannel: 'Engineering',
         emailDistributionList: 'engineering@company.com',
     },
 ];

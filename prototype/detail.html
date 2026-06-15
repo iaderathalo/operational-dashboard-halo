@@ -1559,7 +1559,7 @@
                                 text: 'Update: "Identified query plan regression. Testing forced plan rebuild."',
                             },
                         ],
-                        actions: ['View in ITSM', 'Add Update'],
+                        actions: ['Open in ServiceNow', 'Add Update'],
                     },
                     {
                         date: 'March 1, 2026',
@@ -1889,7 +1889,7 @@
                 },
 
                 shared: {
-                    slack: '#usconsulting-ops',
+                    teamsChannel: 'US Consulting Ops',
                     email: 'support@corp.com',
                     noc: '+1 (555) 000-9999',
                     vendor: 'US Consulting \u00b7 1-800-NO-SFTWRE',
@@ -1935,7 +1935,7 @@
                 ],
 
                 sev1Channels: [
-                    { ch: 'Slack: #incident-response', checked: true },
+                    { ch: 'Microsoft Teams: Incident Response', checked: true },
                     { ch: 'PagerDuty: CRM Escalation Policy', checked: true },
                     { ch: 'Email: crm-stakeholders@corp.com', checked: true },
                     { ch: 'SMS blast to extended team', checked: false },
@@ -2461,7 +2461,7 @@
                 const onCallHTML = P.onCall
                     .map(
                         (c) => `
-    <div class="contact-card"><div class="contact-avatar">${c.initials}</div><div><div class="contact-name">${c.name}</div><div class="contact-role">${c.role}</div><div class="contact-links"><a class="contact-link">Call</a><a class="contact-link">Slack</a><a class="contact-link">Email</a></div></div></div>
+    <div class="contact-card"><div class="contact-avatar">${c.initials}</div><div><div class="contact-name">${c.name}</div><div class="contact-role">${c.role}</div><div class="contact-links"><a class="contact-link">Call</a><a class="contact-link">Teams</a><a class="contact-link">Email</a></div></div></div>
   `
                     )
                     .join('');
@@ -2479,7 +2479,7 @@
                 const teamHTML = P.team
                     .map(
                         (c) => `
-    <div class="contact-card"><div class="contact-avatar">${c.initials}</div><div><div class="contact-name">${c.name}</div><div class="contact-role">${c.role}</div><div class="contact-links"><a class="contact-link">Call</a><a class="contact-link">Slack</a><a class="contact-link">Email</a></div></div></div>
+    <div class="contact-card"><div class="contact-avatar">${c.initials}</div><div><div class="contact-name">${c.name}</div><div class="contact-role">${c.role}</div><div class="contact-links"><a class="contact-link">Call</a><a class="contact-link">Teams</a><a class="contact-link">Email</a></div></div></div>
   `
                     )
                     .join('');
@@ -2504,7 +2504,7 @@
     <div class="card">
       <div class="card-title">Shared Resources</div>
       <div style="font-size:13px;display:grid;grid-template-columns:140px 1fr;gap:8px">
-        <span style="color:var(--text2)">Slack Channel</span><span style="color:var(--accent)">${A.shared.slack}</span>
+                <span style="color:var(--text2)">Microsoft Teams Channel</span><span style="color:var(--accent)">${A.shared.teamsChannel}</span>
         <span style="color:var(--text2)">Email DL</span><span>${A.shared.email}</span>
         <span style="color:var(--text2)">NOC Bridge</span><span>${A.shared.noc}</span>
         <span style="color:var(--text2)">Vendor Support</span><span>${A.shared.vendor}</span>
@@ -2830,11 +2830,11 @@
 
                 const notifHTML = [
                     {
-                        text: `Perception transitions (G\u2192A, A\u2192R) \u2014 Slack ${A.shared.slack}`,
+                        text: `Perception transitions (G\u2192A, A\u2192R) \u2014 Microsoft Teams: ${A.shared.teamsChannel}`,
                         checked: true,
                     },
                     { text: 'Perception RED \u2014 PagerDuty escalation', checked: true },
-                    { text: 'Health transitions \u2014 PagerDuty + Slack', checked: true },
+                    { text: 'Health transitions \u2014 PagerDuty + Microsoft Teams', checked: true },
                     { text: 'Perception threshold warnings (approaching AMBER)', checked: false },
                     { text: 'Daily perception summary email to app owner', checked: true },
                 ]

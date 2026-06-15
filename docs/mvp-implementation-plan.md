@@ -34,16 +34,27 @@
 | ----------------------------------------------------- | ----------- |
 | User Perception tracking (dual-status indicators)     | Phase 2     |
 | WebSocket real-time push                              | Phase 2     |
+| PlanView EA sync for portfolio, TPM, and applications | Phase 2     |
 | ServiceNow integration (incident ticket sync)         | Phase 2     |
 | PagerDuty integration (on-call + paging)              | Phase 2     |
-| Slack/email/SMS notifications                         | Phase 2     |
-| External health check sources (Datadog, AppDynamics)  | Phase 2     |
+| Microsoft Teams/email/SMS notifications               | Phase 2     |
+| Health-source integration (Datadog + app.komodor.com) | Phase 2    |
 | Fine-grained RBAC (Viewer/Operator/Admin/Super Admin) | Phase 3     |
 | Mobile responsive layout                              | Phase 3     |
 | WCAG 2.1 AA audit + fixes                             | Phase 3     |
 | Audit log search/export UI                            | Phase 3     |
 | Performance testing at scale (500 apps)               | Phase 3     |
 | Public status page                                    | Future      |
+
+### Target Production Data Sources
+
+| Domain | Source System | Notes |
+| ------ | ------------- | ----- |
+| Portfolio hierarchy, TPM ownership, application catalog | PlanView EA | Approved system of record for portfolio and ownership metadata |
+| Application health | Datadog | Approved source for application-level health and availability |
+| Container health | app.komodor.com | Approved source for Kubernetes and container runtime health |
+| Incident ticketing | ServiceNow | Approved incident ticketing platform |
+| Collaboration alerts | Microsoft Teams | Approved collaboration channel for operational notifications |
 
 ---
 
@@ -151,7 +162,7 @@ interface Team {
   id: string;
   name: string;
   department: string;
-  slackChannel?: string;
+  teamsChannel?: string;
   emailDistributionList?: string;
 }
 ```
@@ -552,6 +563,6 @@ db/seed-dashboard-data.ts
 | Keep MongoDB (not PostgreSQL/TimescaleDB)    | Already provisioned; adequate for MVP scale; avoids infrastructure changes           |
 | REST polling (not WebSocket)                 | Simpler for prototype; adequate at 60s intervals; WebSocket added in Phase 2         |
 | Local incident creation (no ITSM sync)       | Eliminates external dependency for MVP; ServiceNow adapter added in Phase 2          |
-| Mock/seed data (not real monitoring sources) | Enables demo without external system access; adapter pattern supports future sources |
+| Mock/seed data for MVP demo                  | Enables demo without external system access; production sources remain PlanView EA, Datadog, app.komodor.com, ServiceNow, and Microsoft Teams |
 | Keep existing Tasks feature                  | Preserves template reference; non-conflicting routes                                 |
 | Any authenticated user can create incidents  | Simplifies MVP; proper RBAC deferred to Phase 3                                      |

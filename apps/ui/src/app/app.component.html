@@ -14,6 +14,34 @@
             </div>
 
             <div class="header-meta">
+                <div class="header-data-mode">
+                    <span class="header-data-mode-label">Data</span>
+                    <div
+                        class="header-data-mode-toggle"
+                        role="group"
+                        aria-label="Dashboard data source"
+                    >
+                        <button
+                            type="button"
+                            class="header-data-mode-button"
+                            [class.active]="dataMode === 'demo'"
+                            [attr.aria-pressed]="dataMode === 'demo'"
+                            (click)="setDataMode('demo')"
+                        >
+                            Demo
+                        </button>
+                        <button
+                            type="button"
+                            class="header-data-mode-button"
+                            [class.active]="dataMode === 'real'"
+                            [attr.aria-pressed]="dataMode === 'real'"
+                            (click)="setDataMode('real')"
+                        >
+                            Real Data
+                        </button>
+                    </div>
+                </div>
+
                 <div class="header-profile" (click)="$event.stopPropagation()">
                     <button
                         type="button"
@@ -80,7 +108,7 @@
 </nav>
 
 <main class="main" data-cy="main" [class.blur]="isMenuOpen">
-    @if (apiUnreachable === true || apiError === true) {
+    @if (dataMode === 'real' && (apiUnreachable === true || apiError === true)) {
         <div class="main__api_error">
             @if (apiUnreachable === true) {
                 <p>Tasks API is unreachable</p>
