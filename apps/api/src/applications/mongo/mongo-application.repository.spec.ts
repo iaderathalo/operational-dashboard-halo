@@ -6,7 +6,10 @@ import { Application } from '@operational-dashboard/shared-api-model/model/dashb
 import MongoApplicationRepository from './mongo-application.repository';
 
 describe('MongoApplicationRepository', () => {
-    const repository = new MongoApplicationRepository({} as ConfigService, {} as Logger);
+    const repository = new MongoApplicationRepository(
+        { get: jest.fn() } as unknown as ConfigService,
+        {} as Logger
+    );
 
     it('should combine search and ownerEmail filters with an $and query', async () => {
         const toArray = jest.fn().mockResolvedValue([]);

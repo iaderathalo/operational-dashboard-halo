@@ -54,6 +54,7 @@ import DashboardDetailResponse, {
 } from './dashboard/DetailPage';
 import Incident, { IncidentUpdate, CreateIncidentRequest, IncidentSeverity, IncidentStatus, BusinessImpactLevel } from './dashboard/Incident';
 import Contact, { ContactRole, Team } from './dashboard/Team';
+import HealthSnapshot from './dashboard/HealthSnapshot';
 
 export {
     Application,
@@ -121,4 +122,5 @@ export {
     UptimeMetrics,
     UserSessionMetric,
     HealthStatusRecord,
+    HealthSnapshot,
 };

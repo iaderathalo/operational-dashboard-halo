@@ -11,4 +11,5 @@ export interface ApplicationRepository extends Repository<Application> {
         search?: string;
         ownerEmail?: string;
     }): Promise<Application[]>;
+    updateHealth(id: object, health: Partial<Application>): Promise<number>;
 }

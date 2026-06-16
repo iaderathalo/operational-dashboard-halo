@@ -102,6 +102,11 @@ const mapApplication = (record, nowIso) => {
         dataClassification: record.DataClassification || null,
         hosting: record.Hosting || null,
         owningOrganization: record.OwningOrganization || null,
+        // Preserve PlanView's structured hierarchy fields instead of flattening
+        // them into `businessUnit`, so the dashboard can roll up by the source's
+        // own taxonomy (operating company -> delivery portfolio) without re-deriving it.
+        opCo: record.OpCo || null,
+        businessDeliveryPortfolio: record.BusinessDeliveryPortfolioName || null,
     };
 };
 

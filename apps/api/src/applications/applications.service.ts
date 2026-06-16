@@ -140,4 +140,19 @@ export default class ApplicationsService {
         this.logger.info(`Deleting application with id: ${id}`);
         return this.applicationRepository.deleteOne({ _id: id });
     }
+
+    /**
+     * Persists a Crawler health update onto an application. A manual status
+     * override always wins; otherwise currentStatus tracks the Datadog health for
+     * mapped apps and is left untouched for unmapped ones.
+     * @param {object} app - the application being updated
+     * @param {object} health - partial health fields to persist
+     * @returns {Promise<void>}
+     */
+    async applyHealthUpdate(app: Application, health: Partial<Application>): Promise<void> {
+        const mappedStatus =
+            health.datadogMapped && health.healthStatus ? health.healthStatus : app.currentStatus;
+        const currentStatus = app.statusOverride ? app.statusOverride.status : mappedStatus;
+        await this.applicationRepository.updateHealth({ _id: app.id }, { ...health, currentStatus });
+    }
 }

@@ -93,6 +93,23 @@ export default class InMemoryApplicationRepository implements ApplicationReposit
     /**
      *
      * @param appId
+     * @param health
+     */
+    async updateHealth(appId, health: Partial<Application>): Promise<number> {
+        const { _id: id } = appId;
+        const index = this.applications.findIndex((a) => a.id === id);
+        if (index === -1) return 0;
+        this.applications[index] = {
+            ...this.applications[index],
+            ...health,
+            updatedAt: new Date().toISOString(),
+        };
+        return 1;
+    }
+
+    /**
+     *
+     * @param appId
      */
     async deleteOne(appId): Promise<boolean> {
         const { _id: id } = appId;

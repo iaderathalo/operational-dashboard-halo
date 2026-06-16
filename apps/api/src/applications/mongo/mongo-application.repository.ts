@@ -67,6 +67,19 @@ export default class MongoApplicationRepository
                     statusOverride: 1,
                     createdAt: 1,
                     updatedAt: 1,
+                    datadogServiceId: 1,
+                    datadogNamespace: 1,
+                    datadogAppName: 1,
+                    healthStatus: 1,
+                    datadogMapped: 1,
+                    uptime24h: 1,
+                    uptime7d: 1,
+                    uptime30d: 1,
+                    slaTarget: 1,
+                    errorBudgetRemainingPct: 1,
+                    lastSyncAt: 1,
+                    lastSyncStatus: 1,
+                    resolutionPath: 1,
                 },
             }
         );
@@ -118,6 +131,24 @@ export default class MongoApplicationRepository
             { ...entity, updatedAt: new Date().toISOString() }
         );
         return resp?._id ? 1 : 0;
+    }
+
+    /**
+     * Applies a partial health update using $set so a Crawler write never clobbers
+     * unrelated fields (name, tier, statusOverride) the way findOneAndReplace would.
+     * @param {{ _id: string }} appId - wrapped application id value
+     * @param {Partial<Application>} health - health fields to set
+     * @returns {Promise<number>} 1 when a document matched, otherwise 0
+     */
+    async updateHealth(appId, health: Partial<Application>): Promise<number> {
+        const { _id: id } = appId;
+        const resp = await (
+            await this.getCollection<Application>(this.collectionName)
+        ).updateOne(
+            { _id: ObjectId.createFromHexString(id) },
+            { $set: { ...health, updatedAt: new Date().toISOString() } }
+        );
+        return resp.matchedCount;
     }
 
     /**

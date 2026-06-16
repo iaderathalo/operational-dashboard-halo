@@ -144,7 +144,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     formatUptime(uptime: number | null): string {
-        return uptime === null ? 'Undefined' : `${uptime}%`;
+        return uptime === null ? 'Undefined' : `${uptime.toFixed(2)}%`;
     }
 
     formatActiveUsers(activeUsers: number | null): string {
