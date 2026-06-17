@@ -1,4 +1,9 @@
 /* eslint-disable max-lines, max-lines-per-function */
+import {
+    DashboardDetailTimelineTone,
+    HealthSnapshot,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
+
 import { PortfolioApp, PortfolioAppContext, PortfolioNode } from '../../models/portfolio.model';
 
 export type DetailTabId =
@@ -125,6 +130,89 @@ const createScaledBars = (values: readonly number[]): number[] => {
 
 const createTimelineBars = (pattern: string): Array<'g' | 'a' | 'r'> =>
     pattern.split('').map((tone) => tone as 'g' | 'a' | 'r');
+
+const HEALTH_STATUS_TONE: Record<string, DashboardDetailTimelineTone> = {
+    GREEN: 'g',
+    AMBER: 'a',
+    RED: 'r',
+};
+
+const MONTH_ABBR = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+];
+
+const MAX_TIMELINE_AXIS_TICKS = 7;
+
+/**
+ * Formats a YYYY-MM-DD day key into a compact axis label (e.g. "Jun 10").
+ * @param {string} dayKey ISO date prefix (YYYY-MM-DD).
+ * @returns {string} Short month/day label.
+ */
+const formatTimelineAxisLabel = (dayKey: string): string => {
+    const [, month, day] = dayKey.split('-');
+    return `${MONTH_ABBR[Number(month) - 1] ?? month} ${day}`;
+};
+
+/**
+ * Picks at most a few evenly spaced items from a chronological list and labels
+ * them, so the axis stays readable however many runs there are.
+ * @param {readonly T[]} items Chronological items (oldest first).
+ * @param {Function} label Maps an item to its axis label.
+ * @returns {string[]} Down-sampled axis labels.
+ */
+const downsampleAxis = <T>(items: readonly T[], label: (item: T) => string): string[] => {
+    if (items.length <= MAX_TIMELINE_AXIS_TICKS) {
+        return items.map(label);
+    }
+
+    const step = (items.length - 1) / (MAX_TIMELINE_AXIS_TICKS - 1);
+    return Array.from({ length: MAX_TIMELINE_AXIS_TICKS }, (_, index) =>
+        label(items[Math.round(index * step)])
+    );
+};
+
+/**
+ * Lines up the append-only Health series as one bar per Crawler run, oldest to
+ * newest, with a matching down-sampled axis. Same-day runs are labelled by time
+ * (HH:MM), multi-day series by date. Unknown statuses fall to amber so an
+ * unmapped run never paints a false green (PRD FR-3).
+ * @param {readonly HealthSnapshot[]} points Health records, any order.
+ * @returns {object} Timeline bars and axis labels for the Health row.
+ */
+export const buildHealthTimeline = (
+    points: readonly HealthSnapshot[]
+): { bars: DashboardDetailTimelineTone[]; axis: string[] } => {
+    const ordered = [...points].sort((left, right) =>
+        left.recordedAt.localeCompare(right.recordedAt)
+    );
+
+    const bars = ordered.map((point) => HEALTH_STATUS_TONE[point.status] ?? 'a');
+
+    const sameDay =
+        ordered.length > 0 &&
+        ordered.every(
+            (point) => point.recordedAt.slice(0, 10) === ordered[0].recordedAt.slice(0, 10)
+        );
+
+    const axis = downsampleAxis(ordered, (point) =>
+        sameDay
+            ? point.recordedAt.slice(11, 16)
+            : formatTimelineAxisLabel(point.recordedAt.slice(0, 10))
+    );
+
+    return { bars, axis };
+};
 
 const createHeatmapRows = (): Array<{
     label: string;
@@ -982,7 +1070,7 @@ export const createDetailView = (context: PortfolioAppContext | null) => {
             : 'Undefined';
     const incidentCount = app?.incidents ?? DETAIL_TEMPLATE.openIncidents.count;
     const uptimeValue =
-        app?.uptime !== null && app?.uptime !== undefined ? `${app.uptime}%` : 'Undefined';
+        app?.uptime !== null && app?.uptime !== undefined ? `${app.uptime.toFixed(2)}%` : 'Undefined';
     const activeDriftModels = DETAIL_TEMPLATE.aiDrift.models.filter(
         (model) => model.status !== 'green'
     ).length;

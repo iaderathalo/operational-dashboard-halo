@@ -68,6 +68,18 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     };
 
     /**
+     * Columns that are still placeholder (not yet wired to a live source) and are
+     * rendered greyed out. Flip a flag to `false` as each column goes live so the
+     * dimming disappears on its own. Health/Uptime are live Datadog and never here.
+     */
+    readonly placeholderColumns = {
+        perception: true,
+        activeUsers: true,
+        incidents: true,
+        lastIncident: true,
+    };
+
+    /**
      * Creates the portfolio page controller.
      * @param {object} router - router used for dashboard detail navigation
      * @param {object} dashboardService - service used to load dashboard data from the API
@@ -149,6 +161,69 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
     formatActiveUsers(activeUsers: number | null): string {
         return activeUsers === null ? 'Undefined' : activeUsers.toLocaleString();
+    }
+
+    /**
+     * Provenance tooltip for the Health column: whether the value is live Datadog,
+     * stale (last sync failed), or simply not mapped to Datadog.
+     * @param {object} app - portfolio application
+     * @returns {string} human-readable provenance for a native tooltip
+     */
+    healthProvenance(app: PortfolioApp): string {
+        if (app.lastSyncStatus === 'error') {
+            return 'Stale — last Datadog sync failed';
+        }
+
+        if (app.datadogMapped === false || app.resolutionPath === 'unmapped') {
+            return 'Not mapped in Datadog — health unavailable';
+        }
+
+        const via = app.resolutionPath === 'fallback' ? ' (fallback)' : '';
+        return `Live · Datadog${via}${this.syncSuffix(app.lastSyncAt)}`;
+    }
+
+    /**
+     * Provenance tooltip for the Uptime column (Datadog SLO, or no SLO mapped).
+     * @param {object} app - portfolio application
+     * @returns {string} human-readable provenance for a native tooltip
+     */
+    uptimeProvenance(app: PortfolioApp): string {
+        if (app.uptime === null) {
+            return 'No SLO in Datadog — uptime unavailable';
+        }
+
+        return `Live · Datadog SLO${this.syncSuffix(app.lastSyncAt)}`;
+    }
+
+    /**
+     * Builds a " · sync hace Xm" suffix from the last sync timestamp, or '' if none.
+     * @param {string | null} [lastSyncAt] - ISO timestamp of the last Crawler run
+     * @returns {string} relative-time suffix
+     */
+    private syncSuffix(lastSyncAt?: string | null): string {
+        if (!lastSyncAt) {
+            return '';
+        }
+
+        const then = new Date(lastSyncAt).getTime();
+        if (Number.isNaN(then)) {
+            return '';
+        }
+
+        const minutes = Math.max(0, Math.round((Date.now() - then) / 60000));
+        if (minutes < 1) {
+            return ' · synced <1 min ago';
+        }
+        if (minutes < 60) {
+            return ` · synced ${minutes} min ago`;
+        }
+
+        const hours = Math.round(minutes / 60);
+        if (hours < 24) {
+            return ` · synced ${hours} h ago`;
+        }
+
+        return ` · synced ${Math.round(hours / 24)} d ago`;
     }
 
     /**

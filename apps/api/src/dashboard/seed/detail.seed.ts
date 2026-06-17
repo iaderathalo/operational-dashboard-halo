@@ -299,12 +299,37 @@ const buildIncidentTrendText = (count: number): string => {
 
 const resolveTier = (uptime: number): number => (uptime >= 99.95 ? 1 : 2);
 
+/**
+ * Maps remaining error-budget percentage to a status colour: greener with more
+ * headroom, red when nearly exhausted, grey when there is no SLO to measure.
+ * @param {number | null} pct - remaining error budget percentage, or null
+ * @returns {string} detail status colour
+ */
+const resolveErrorBudgetColor = (pct: number | null): DashboardDetailStatus => {
+    if (pct == null) {
+        return 'undefined';
+    }
+
+    if (pct < 5) {
+        return 'red';
+    }
+
+    if (pct < 20) {
+        return 'amber';
+    }
+
+    return 'green';
+};
+
 const createOverviewMetrics = (
     uptimeValue: string,
     perception: DashboardDetailStatus,
     usersValue: string,
     incidentCount: number,
-    activeDriftModels: number
+    activeDriftModels: number,
+    errorBudgetValue: string,
+    errorBudgetColor: DashboardDetailStatus,
+    errorBudgetTrendText: string
 ): DashboardDetailView['overviewMetrics'] => [
     {
         label: 'Uptime (30d)',
@@ -336,10 +361,10 @@ const createOverviewMetrics = (
     },
     {
         label: 'Error Budget',
-        value: '18 min',
-        color: 'green',
+        value: errorBudgetValue,
+        color: errorBudgetColor,
         trend: 'neutral',
-        trendText: 'of 22 min remaining',
+        trendText: errorBudgetTrendText,
     },
     {
         label: 'AI Tokens',
@@ -455,9 +480,19 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
     const { app, path } = context;
     const scope = path[path.length - 1];
     const usersValue = app.users.toLocaleString();
-    const uptimeValue = `${app.uptime}%`;
+    const uptimeValue = app.uptime != null ? `${app.uptime.toFixed(2)}%` : 'Undefined';
     const incidentCount = app.incidents;
     const activeDriftModels = 1;
+
+    // Error budget + SLA target are live from the Crawler (errorBudgetRemainingPct,
+    // slaTarget on Application); render them honestly as a percentage rather than
+    // the old fabricated "18 min / 22 min" figures.
+    const errorBudgetPct = app.errorBudgetRemainingPct ?? null;
+    const errorBudgetRemaining =
+        errorBudgetPct != null ? `${errorBudgetPct.toFixed(1)}%` : UNDEFINED_TEXT;
+    const slaTargetValue = app.slaTarget != null ? `${app.slaTarget}%` : UNDEFINED_TEXT;
+    const errorBudgetTrendText =
+        app.slaTarget != null ? `SLA target ${app.slaTarget}%` : 'No SLO data';
 
     const view: DashboardDetailView = {
         name: app.name,
@@ -478,14 +513,14 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             trend: 'up',
             trendText: '▲ 0.02% vs 7d avg',
         },
-        slaTarget: '99.95%',
+        slaTarget: slaTargetValue,
         errorBudget: {
-            remaining: '18 min',
-            total: '22 min',
-            used: '4 min',
-            pct: 82,
-            burnRate: '0.6 min/day',
-            breach: 'Never (at current rate)',
+            remaining: errorBudgetRemaining,
+            total: 'error budget',
+            used: errorBudgetPct != null ? `${(100 - errorBudgetPct).toFixed(1)}%` : UNDEFINED_TEXT,
+            pct: errorBudgetPct != null ? Math.round(errorBudgetPct) : 0,
+            burnRate: UNDEFINED_TEXT,
+            breach: UNDEFINED_TEXT,
         },
         activeUsers: {
             value: usersValue,
@@ -956,7 +991,10 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             app.perception,
             usersValue,
             incidentCount,
-            activeDriftModels
+            activeDriftModels,
+            errorBudgetRemaining,
+            resolveErrorBudgetColor(errorBudgetPct),
+            errorBudgetTrendText
         ),
     };
 

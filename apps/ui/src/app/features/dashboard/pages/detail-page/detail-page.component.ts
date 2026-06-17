@@ -10,9 +10,11 @@ import {
     DashboardDetailStatus,
     DashboardDetailView,
     DashboardDetailNotifyOption,
+    HealthSnapshot,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import {
+    buildHealthTimeline,
     cloneCheckedItems,
     DETAIL_TABS,
     DetailTabId,
@@ -58,6 +60,10 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     activeOverviewRange = '7d';
 
     activePerceptionRange = '24h';
+
+    healthTimelineLive = false;
+
+    healthTimelineEmpty = false;
 
     isSev1ModalOpen = false;
 
@@ -276,12 +282,54 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
                 this.sev1ChannelOptions = cloneCheckedItems(detail.people.sev1Channels);
                 this.updateIncidentDefaults();
                 this.isLoading = false;
+                this.loadHealthTimeline(id);
             },
             error: () => {
                 this.loadError = 'Unable to load application detail.';
                 this.isLoading = false;
             },
         });
+    }
+
+    /**
+     * Overlays the real append-only Health timeline onto the loaded view (FR-3).
+     * Demo mode keeps the seeded showcase bars; real mode replaces them with the
+     * Datadog-backed series, falling back to an honest empty state when none yet.
+     * @param {string} id Portfolio application id from the route.
+     */
+    private loadHealthTimeline(id: string): void {
+        this.healthTimelineLive = false;
+        this.healthTimelineEmpty = false;
+
+        if (this.dataModeService.currentMode === 'demo') {
+            return;
+        }
+
+        this.dashboardService.getHealthHistory(id).subscribe({
+            next: (history) => this.applyHealthTimeline(history.points),
+            error: () => {
+                // Non-critical: leave the existing bars in place if history fails to load.
+            },
+        });
+    }
+
+    /**
+     * Applies a fetched Health series to the Health timeline row.
+     * @param {HealthSnapshot[]} points Health records for the current application.
+     */
+    private applyHealthTimeline(points: HealthSnapshot[]): void {
+        if (!points.length) {
+            // Honest empty state: clear the seeded bars rather than imply false green.
+            this.view.healthTimelineBars = [];
+            this.view.timelineAxis = [];
+            this.healthTimelineEmpty = true;
+            return;
+        }
+
+        const { bars, axis } = buildHealthTimeline(points);
+        this.view.healthTimelineBars = bars;
+        this.view.timelineAxis = axis;
+        this.healthTimelineLive = true;
     }
 
     /**

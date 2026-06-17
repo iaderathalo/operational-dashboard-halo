@@ -7,6 +7,7 @@ import {
     DashboardDetailNotifyOption,
     DashboardDetailPeople,
     DashboardDetailResponse,
+    HealthHistoryResponse,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
@@ -148,6 +149,22 @@ export default class DashboardService {
 
         return this.http.get<DashboardDetailResponse>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/detail`
+        );
+    }
+
+    /**
+     * Fetches the append-only Health timeline for a portfolio application (FR-3).
+     * Demo mode keeps the seeded showcase bars, so it returns an empty series.
+     * @param {string} id - portfolio application id
+     * @returns {object} Health history series, newest first
+     */
+    getHealthHistory(id: string): Observable<HealthHistoryResponse> {
+        if (this.dataModeService.currentMode === 'demo') {
+            return of({ applicationId: id, points: [] });
+        }
+
+        return this.http.get<HealthHistoryResponse>(
+            `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/health-history`
         );
     }
 

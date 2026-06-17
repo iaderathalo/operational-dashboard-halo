@@ -528,6 +528,23 @@
     margin-left: 92px;
 }
 
+.timeline-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--grey);
+    margin-top: 6px;
+    margin-left: 92px;
+}
+
+.timeline-note .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+}
+
 .legend-dot {
     width: 8px;
     height: 8px;

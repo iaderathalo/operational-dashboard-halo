@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Req } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 
 import {
     DashboardDetailResponse,
     DashboardSummary,
+    HealthHistoryResponse,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardService from './dashboard.service';
@@ -58,6 +59,28 @@ export default class DashboardController {
         @Param('id') id: string
     ): Promise<DashboardDetailResponse> {
         return this.dashboardService.getAppDetail(id, request.user?.email);
+    }
+
+    /**
+     * Returns the append-only Health timeline for a portfolio application (FR-3).
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
+     * @param {string} id - portfolio application identifier
+     * @param {string} [limit] - optional cap on the number of records returned
+     * @returns {Promise<object>} Health history series, newest first
+     */
+    @Get('portfolio/apps/:id/health-history')
+    async getAppHealthHistory(
+        @Req() request: { user?: { email?: string } },
+        @Param('id') id: string,
+        @Query('limit') limit?: string
+    ): Promise<HealthHistoryResponse> {
+        return this.dashboardService.getHealthHistory(
+            id,
+            request.user?.email,
+            limit ? Number(limit) : undefined
+        );
     }
 
     /**

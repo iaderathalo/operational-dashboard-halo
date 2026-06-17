@@ -152,6 +152,12 @@
                         <span><span class="legend-dot red"></span>Red</span>
                         <span><span class="legend-dot grey"></span>Incident</span>
                     </div>
+                    <div class="timeline-note" *ngIf="healthTimelineLive">
+                        <span class="live-dot"></span>Health timeline · live Datadog
+                    </div>
+                    <div class="timeline-note" *ngIf="healthTimelineEmpty">
+                        No Datadog health history yet — bars appear after the next sync.
+                    </div>
                 </div>
 
                 <div class="two-col">
