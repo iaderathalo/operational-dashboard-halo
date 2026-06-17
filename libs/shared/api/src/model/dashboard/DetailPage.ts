@@ -6,12 +6,16 @@ export type DashboardDetailHeatmapTone = 'g' | 'a' | 'r' | 'x';
 export type DashboardDetailSeriesTone = 'accent' | 'amber' | 'red' | 'green';
 export type DashboardDetailActivityTone = 'accent' | 'amber' | 'green' | 'grey' | 'red';
 
+/** Where a metric/card actually comes from, for the live-vs-placeholder cue. */
+export type DashboardDetailSource = 'datadog' | 'planview' | 'placeholder';
+
 export interface DashboardDetailMetricCard {
     label: string;
     value: string | number;
     color: DashboardDetailStatus;
     trend: DashboardDetailTrend;
     trendText: string;
+    source?: DashboardDetailSource;
 }
 
 export interface DashboardDetailTimelineIncident {
@@ -100,6 +104,14 @@ export interface DashboardDetailHealthCheck {
     name: string;
     ok: boolean;
     time: string;
+}
+
+export interface DashboardDetailMonitor {
+    name: string;
+    status: DashboardDetailStatus;
+    message: string;
+    lastTriggered: string;
+    inMaintenance: boolean;
 }
 
 export interface DashboardDetailHealthEvent {
@@ -320,6 +332,7 @@ export interface DashboardDetailView {
     features: DashboardDetailFeature[];
     heatmapRows: DashboardDetailHeatmapRow[];
     healthChecks: DashboardDetailHealthCheck[];
+    monitors: DashboardDetailMonitor[];
     healthEvents: DashboardDetailHealthEvent[];
     activityLog: DashboardDetailActivityItem[];
     incidentMetricCards: DashboardDetailMetricCard[];

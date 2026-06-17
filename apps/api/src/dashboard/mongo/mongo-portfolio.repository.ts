@@ -400,6 +400,7 @@ export default class MongoPortfolioRepository
             resolutionPath: application.resolutionPath ?? null,
             lastSyncStatus: application.lastSyncStatus ?? null,
             lastSyncAt: application.lastSyncAt ?? null,
+            monitors: application.monitors ?? [],
             users: application.currentUserCount || 0,
             totalInternalUsers: application.internalUserCount || 0,
             totalExternalUsers: application.externalUserCount || 0,

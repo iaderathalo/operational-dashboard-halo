@@ -479,6 +479,29 @@ const DETAIL_TEMPLATE = {
         { name: 'Memory Usage < 85%', ok: true, time: '72%' },
         { name: 'TLS Certificate Valid', ok: true, time: '33 days' },
     ],
+    monitors: [
+        {
+            name: 'API Latency p95 > 2s',
+            status: 'amber' as const,
+            message: 'p95 latency elevated on the census upload endpoint.',
+            lastTriggered: '2026-03-05 11:42 UTC',
+            inMaintenance: true,
+        },
+        {
+            name: 'Error Rate > 1%',
+            status: 'green' as const,
+            message: 'Error rate within budget.',
+            lastTriggered: '2026-03-04 08:10 UTC',
+            inMaintenance: false,
+        },
+        {
+            name: 'Synthetic: Login Flow',
+            status: 'green' as const,
+            message: 'All steps passing.',
+            lastTriggered: '2026-03-05 09:00 UTC',
+            inMaintenance: false,
+        },
+    ],
     healthEvents: [
         {
             time: 'Mar 05 12:00',
@@ -1007,6 +1030,7 @@ const createOverviewMetrics = (
         color: 'green' as const,
         trend: DETAIL_TEMPLATE.uptime.trend,
         trendText: DETAIL_TEMPLATE.uptime.trendText,
+        source: 'datadog' as const,
     },
     {
         label: 'Perception Score',
@@ -1014,6 +1038,7 @@ const createOverviewMetrics = (
         color: perception,
         trend: 'down' as const,
         trendText: '▼ 8 pts from baseline',
+        source: 'placeholder' as const,
     },
     {
         label: 'Active Users',
@@ -1021,6 +1046,7 @@ const createOverviewMetrics = (
         color: 'green' as const,
         trend: DETAIL_TEMPLATE.activeUsers.trend,
         trendText: DETAIL_TEMPLATE.activeUsers.trendText,
+        source: 'planview' as const,
     },
     {
         label: 'Open Incidents',
@@ -1028,6 +1054,7 @@ const createOverviewMetrics = (
         color: incidentCount > 0 ? 'amber' : 'green',
         trend: 'neutral' as const,
         trendText: buildIncidentTrendText(incidentCount),
+        source: 'placeholder' as const,
     },
     {
         label: 'Error Budget',
@@ -1035,6 +1062,7 @@ const createOverviewMetrics = (
         color: 'green' as const,
         trend: 'neutral' as const,
         trendText: `of ${DETAIL_TEMPLATE.errorBudget.total} remaining`,
+        source: 'datadog' as const,
     },
     {
         label: 'AI Tokens',
@@ -1042,6 +1070,7 @@ const createOverviewMetrics = (
         color: DETAIL_TEMPLATE.aiTokens.status,
         trend: 'down' as const,
         trendText: `${DETAIL_TEMPLATE.aiTokens.costMtd} of ${DETAIL_TEMPLATE.aiTokens.costBudget}`,
+        source: 'placeholder' as const,
     },
     {
         label: 'AI Drift',
@@ -1049,6 +1078,7 @@ const createOverviewMetrics = (
         color: DETAIL_TEMPLATE.aiDrift.status,
         trend: 'down' as const,
         trendText: activeDriftModels > 0 ? 'Models drifting' : 'All stable',
+        source: 'placeholder' as const,
     },
     {
         label: 'Infra Cost MTD',
@@ -1056,6 +1086,7 @@ const createOverviewMetrics = (
         color: DETAIL_TEMPLATE.infraCost.status,
         trend: 'down' as const,
         trendText: '▲ 8.1% vs last month',
+        source: 'placeholder' as const,
     },
 ];
 

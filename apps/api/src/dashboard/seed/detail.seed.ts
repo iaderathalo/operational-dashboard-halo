@@ -1,8 +1,11 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 import {
+    ApplicationMonitor,
+    ApplicationStatus,
     DashboardDetailContactEntry,
     DashboardDetailContacts,
+    DashboardDetailMonitor,
     DashboardDetailPeople,
     DashboardDetailResponse,
     DashboardDetailStatus,
@@ -337,6 +340,7 @@ const createOverviewMetrics = (
         color: 'green',
         trend: 'up',
         trendText: '▲ 0.02% vs 7d avg',
+        source: 'datadog',
     },
     {
         label: 'Perception Score',
@@ -344,6 +348,7 @@ const createOverviewMetrics = (
         color: perception,
         trend: 'down',
         trendText: '▼ 8 pts from baseline',
+        source: 'placeholder',
     },
     {
         label: 'Active Users',
@@ -351,6 +356,7 @@ const createOverviewMetrics = (
         color: 'green',
         trend: 'up',
         trendText: '▲ 12% vs avg',
+        source: 'planview',
     },
     {
         label: 'Open Incidents',
@@ -358,6 +364,7 @@ const createOverviewMetrics = (
         color: incidentCount > 0 ? 'amber' : 'green',
         trend: 'neutral',
         trendText: buildIncidentTrendText(incidentCount),
+        source: 'placeholder',
     },
     {
         label: 'Error Budget',
@@ -365,6 +372,7 @@ const createOverviewMetrics = (
         color: errorBudgetColor,
         trend: 'neutral',
         trendText: errorBudgetTrendText,
+        source: 'datadog',
     },
     {
         label: 'AI Tokens',
@@ -372,6 +380,7 @@ const createOverviewMetrics = (
         color: 'amber',
         trend: 'down',
         trendText: '$48.72 of $250.00 budget',
+        source: 'placeholder',
     },
     {
         label: 'AI Drift',
@@ -379,6 +388,7 @@ const createOverviewMetrics = (
         color: 'amber',
         trend: 'down',
         trendText: activeDriftModels > 0 ? 'Models drifting' : 'All stable',
+        source: 'placeholder',
     },
     {
         label: 'Infra Cost MTD',
@@ -386,6 +396,7 @@ const createOverviewMetrics = (
         color: 'red',
         trend: 'down',
         trendText: '▲ 8.1% vs last month',
+        source: 'placeholder',
     },
 ];
 
@@ -407,6 +418,38 @@ const getOptionalText = (value?: string | null): string | undefined => {
 
     return text || undefined;
 };
+
+const MONITOR_STATUS_TONE: Record<ApplicationStatus, DashboardDetailStatus> = {
+    GREEN: 'green',
+    AMBER: 'amber',
+    RED: 'red',
+};
+
+/** Strip Datadog template noise ({{...}}) + HTML tags and trim a message for display. */
+const cleanMonitorMessage = (message: string): string =>
+    message
+        .replace(/\{\{[^}]*\}\}/g, ' ') // Datadog template conditionals/vars
+        .replace(/<[^>]+>/g, ' ') // HTML the message body carries (e.g. <br />)
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+/** Format an ISO last-change timestamp as "YYYY-MM-DD HH:MM UTC", else Undefined. */
+const formatLastTriggered = (iso: string | null): string => {
+    if (!iso) return UNDEFINED_TEXT;
+    const m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    return m ? `${m[1]} ${m[2]} UTC` : iso;
+};
+
+/** Map the persisted per-app monitor breakdown to the detail view shape (#2). */
+const buildMonitorCards = (monitors?: ApplicationMonitor[]): DashboardDetailMonitor[] =>
+    (monitors ?? []).map((monitor) => ({
+        name: monitor.name,
+        status: MONITOR_STATUS_TONE[monitor.status] ?? 'undefined',
+        message: cleanMonitorMessage(monitor.message),
+        lastTriggered: formatLastTriggered(monitor.lastTriggeredAt),
+        inMaintenance: Boolean(monitor.inMaintenance),
+    }));
 
 const createContactEntry = (
     label: string,
@@ -583,6 +626,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             { name: 'Memory Usage < 85%', ok: true, time: '72%' },
             { name: 'TLS Certificate Valid', ok: true, time: '33 days' },
         ],
+        monitors: buildMonitorCards(app.monitors),
         healthEvents: [
             {
                 time: 'Mar 05 12:00',

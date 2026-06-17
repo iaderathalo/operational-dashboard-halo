@@ -1,6 +1,12 @@
-import { ApplicationStatus } from '@operational-dashboard/shared-api-model/model/dashboard';
+import {
+    ApplicationMonitor,
+    ApplicationStatus,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import { DatadogMonitor, DatadogMonitorState, DatadogSloSummary } from './datadog.types';
+
+/** Cap on stored per-app monitors so a noisy app cannot bloat its document. */
+const MAX_MONITORS = 50;
 
 const STATUS_SEVERITY: Record<ApplicationStatus, number> = { GREEN: 0, AMBER: 1, RED: 2 };
 
@@ -13,18 +19,51 @@ function stateToStatus(state: DatadogMonitorState): ApplicationStatus {
     return 'AMBER';
 }
 
+/** True when a monitor is under an active maintenance window right now (#3). */
+function isInDowntime(monitor: DatadogMonitor): boolean {
+    return Array.isArray(monitor.matching_downtimes) && monitor.matching_downtimes.length > 0;
+}
+
 /**
- * Worst-state-wins rollup of an Application's monitors. An empty set is AMBER
- * (No Data semantics) — never GREEN (PRD FR-2 / SM-C1).
+ * Worst-state-wins rollup of an Application's monitors. Monitors under an active
+ * downtime are suppressed first (#3) so a planned maintenance window never paints a
+ * false RED. An empty set — or one where every monitor is in downtime — is AMBER
+ * (No Data semantics), never GREEN (PRD FR-2 / SM-C1).
  */
 export function rollupStatus(monitors: DatadogMonitor[]): ApplicationStatus {
-    if (!monitors.length) return 'AMBER';
-    return monitors
+    const active = monitors.filter((monitor) => !isInDowntime(monitor));
+    if (!active.length) return 'AMBER';
+    return active
         .map((monitor) => stateToStatus(monitor.overall_state))
         .reduce(
             (worst, status) => (STATUS_SEVERITY[status] > STATUS_SEVERITY[worst] ? status : worst),
             'GREEN' as ApplicationStatus
         );
+}
+
+/**
+ * Per-monitor drill-down for an app (#2): worst-state first, then by name, capped.
+ * Reuses the same state->status mapping as the rollup so the breakdown and the
+ * headline Health status can never disagree.
+ * @param {DatadogMonitor[]} monitors - the app's resolved monitors
+ * @returns {ApplicationMonitor[]} the per-monitor breakdown
+ */
+export function buildMonitorBreakdown(monitors: DatadogMonitor[]): ApplicationMonitor[] {
+    return monitors
+        .map((monitor) => ({
+            id: monitor.id,
+            name: monitor.name,
+            status: stateToStatus(monitor.overall_state),
+            message: (monitor.message ?? '').trim(),
+            lastTriggeredAt: monitor.overall_state_modified ?? null,
+            inMaintenance: isInDowntime(monitor),
+        }))
+        .sort(
+            (a, b) =>
+                STATUS_SEVERITY[b.status] - STATUS_SEVERITY[a.status] ||
+                a.name.localeCompare(b.name)
+        )
+        .slice(0, MAX_MONITORS);
 }
 
 export interface ComputedHealth {

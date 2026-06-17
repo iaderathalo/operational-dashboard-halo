@@ -1,10 +1,27 @@
 export type DatadogMonitorState = 'OK' | 'Warn' | 'Alert' | 'No Data';
 
+/**
+ * A currently-active downtime matching a monitor (#3), surfaced by passing
+ * `with_downtimes=true` to GET /api/v1/monitor. Non-empty => the monitor is under
+ * maintenance now, so its Alert is suppressed rather than counted as a false RED.
+ */
+export interface DatadogDowntimeMatch {
+    id?: number;
+    scope?: string[];
+    end?: number | null;
+}
+
 export interface DatadogMonitor {
     id: number;
     name: string;
     overall_state: DatadogMonitorState;
     tags: string[];
+    // Drill-down fields (#2). Already present in the GET /api/v1/monitor response;
+    // kept here so the snapshot retains them instead of trimming to overall_state.
+    message?: string;
+    overall_state_modified?: string;
+    // Active maintenance windows (#3), present when fetched with_downtimes=true.
+    matching_downtimes?: DatadogDowntimeMatch[];
 }
 
 /**

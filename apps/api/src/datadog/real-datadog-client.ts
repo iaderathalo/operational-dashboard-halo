@@ -102,6 +102,9 @@ export default class RealDatadogClient implements DatadogClient {
             const resp = await this.getWithRateLimitRetry<DatadogMonitor[]>('/api/v1/monitor', {
                 page,
                 page_size: MONITOR_PAGE_SIZE,
+                // Attach currently-active maintenance windows (#3) so the rollup can
+                // suppress a monitor's Alert instead of painting a false RED.
+                with_downtimes: true,
             });
             const body = resp.data;
             if (!Array.isArray(body)) {

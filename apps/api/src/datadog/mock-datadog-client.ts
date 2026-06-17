@@ -83,12 +83,22 @@ export default class MockDatadogClient implements DatadogClient {
             // eslint-disable-next-line no-nested-ternary
             bucket === 1 ? 'Warn' : bucket === 2 ? 'Alert' : bucket === 3 ? 'No Data' : 'OK';
         const count = 2 + (seed % 3); // 2-4 monitors
-        return Array.from({ length: count }, (_, i) => ({
-            id: seed * 10 + i,
-            name: `${key} monitor ${i + 1}`,
-            overall_state: i === 0 ? worst : 'OK', // first monitor drives the worst-state rollup
-            tags: [`${APP_SHORT_KEY}:${key}`, `service:${key}`],
-        }));
+        // Deterministic last-change timestamp (no wall clock) so the breakdown is stable.
+        const modified = new Date((1_700_000_000 + seed) * 1000).toISOString();
+        return Array.from({ length: count }, (_, i) => {
+            const state: DatadogMonitorState = i === 0 ? worst : 'OK';
+            return {
+                id: seed * 10 + i,
+                name: `${key} monitor ${i + 1}`,
+                overall_state: state, // first monitor drives the worst-state rollup
+                tags: [`${APP_SHORT_KEY}:${key}`, `service:${key}`],
+                message:
+                    state === 'OK'
+                        ? `${key} monitor ${i + 1} is healthy.`
+                        : `${key} monitor ${i + 1} is in ${state}. {{#is_alert}}Investigate {{host.name}}.{{/is_alert}}`,
+                overall_state_modified: modified,
+            };
+        });
     }
 
     /**

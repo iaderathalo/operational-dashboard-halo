@@ -7,7 +7,7 @@ import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
 import { DatadogClient } from './datadog-client';
 import { DatadogMonitor, DatadogSloSummary, DatadogSnapshot } from './datadog.types';
-import { buildHealth } from './health-rollup';
+import { buildHealth, buildMonitorBreakdown } from './health-rollup';
 
 export interface SyncSummary {
     appsAttempted: number;
@@ -125,6 +125,7 @@ export default class DatadogSyncService {
 
         await this.applicationsService.applyHealthUpdate(app, {
             ...health,
+            monitors: buildMonitorBreakdown(monitors),
             lastSyncAt: now,
             lastSyncStatus: resolutionPath === 'unmapped' ? 'unmapped' : 'ok',
         });

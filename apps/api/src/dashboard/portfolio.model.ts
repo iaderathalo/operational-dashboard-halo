@@ -1,3 +1,5 @@
+import { ApplicationMonitor } from '@operational-dashboard/shared-api-model/model/dashboard';
+
 export interface PortfolioNode {
     id: string;
     name: string;
@@ -27,6 +29,7 @@ export interface PortfolioApp {
     resolutionPath?: 'primary' | 'fallback' | 'unmapped' | null;
     lastSyncStatus?: 'ok' | 'error' | 'unmapped' | null;
     lastSyncAt?: string | null;
+    monitors?: ApplicationMonitor[];
     users: number;
     totalInternalUsers: number;
     totalExternalUsers: number;

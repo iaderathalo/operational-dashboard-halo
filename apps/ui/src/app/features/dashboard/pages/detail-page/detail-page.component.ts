@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import {
     DashboardDetailChannelOption,
     DashboardDetailPeople,
+    DashboardDetailSource,
     DashboardDetailStatus,
     DashboardDetailView,
     DashboardDetailNotifyOption,
@@ -176,6 +177,21 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         }
 
         return this.healthStatusLabels[status];
+    }
+
+    /**
+     * Provenance tooltip for the live-vs-placeholder dot on detail cards.
+     * @param {string} [source] Where the card's data comes from.
+     * @returns {string} Human-readable provenance for a native tooltip.
+     */
+    sourceTip(source?: DashboardDetailSource): string {
+        if (source === 'datadog') {
+            return 'Live · Datadog';
+        }
+        if (source === 'planview') {
+            return 'Real · from PlanView (not Datadog)';
+        }
+        return 'Placeholder — not wired to a live source yet';
     }
 
     /**

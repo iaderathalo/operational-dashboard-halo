@@ -1,7 +1,7 @@
 /**
  * Make the dashboard model interfaces available from a single module.
  */
-import Application, { ApplicationStatus, ApplicationEnvironment, StatusOverride } from './dashboard/Application';
+import Application, { ApplicationMonitor, ApplicationStatus, ApplicationEnvironment, StatusOverride } from './dashboard/Application';
 import { DashboardSummary, UptimeMetrics, UserSessionMetric, HealthStatusRecord } from './dashboard/Dashboard';
 import DashboardDetailResponse, {
     DashboardDetailActivityItem,
@@ -30,6 +30,7 @@ import DashboardDetailResponse, {
     DashboardDetailLatencySeries,
     DashboardDetailMaintenanceWindow,
     DashboardDetailMetricCard,
+    DashboardDetailMonitor,
     DashboardDetailNotificationPreference,
     DashboardDetailNotifyOption,
     DashboardDetailOpenIncidents,
@@ -41,6 +42,7 @@ import DashboardDetailResponse, {
     DashboardDetailPersonCard,
     DashboardDetailRangeTimeline,
     DashboardDetailSeriesTone,
+    DashboardDetailSource,
     DashboardDetailSettings,
     DashboardDetailSharedContacts,
     DashboardDetailStatus,
@@ -58,6 +60,7 @@ import HealthSnapshot, { HealthHistoryResponse } from './dashboard/HealthSnapsho
 
 export {
     Application,
+    ApplicationMonitor,
     ApplicationStatus,
     ApplicationEnvironment,
     StatusOverride,
@@ -94,6 +97,7 @@ export {
     DashboardDetailLatencySeries,
     DashboardDetailMaintenanceWindow,
     DashboardDetailMetricCard,
+    DashboardDetailMonitor,
     DashboardDetailNotificationPreference,
     DashboardDetailNotifyOption,
     DashboardDetailOpenIncidents,
@@ -102,6 +106,7 @@ export {
     DashboardDetailPersonCard,
     DashboardDetailRangeTimeline,
     DashboardDetailSeriesTone,
+    DashboardDetailSource,
     DashboardDetailSettings,
     DashboardDetailSharedContacts,
     DashboardDetailStatus,
