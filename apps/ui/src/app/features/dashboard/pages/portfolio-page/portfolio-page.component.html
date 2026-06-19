@@ -283,6 +283,7 @@
                     <th>Health</th>
                     <th>Perception</th>
                     <th>Uptime</th>
+                    <th>Maturity</th>
                     <th>Total External Users</th>
                     <th>Total Internal Users</th>
                     <th>Active Users</th>
@@ -297,7 +298,12 @@
                     title="Click to view details"
                 >
                     <td data-label="Application">{{ app.name }}</td>
-                    <td data-label="Health">
+                    <td
+                        data-label="Health"
+                        class="prov-cell"
+                        title=""
+                        [attr.data-prov]="healthProvenance(app)"
+                    >
                         <div class="status-cell">
                             <span class="status-dot" [ngClass]="app.health"></span>
                             <span class="status-text" [ngClass]="app.health">{{
@@ -305,7 +311,10 @@
                             }}</span>
                         </div>
                     </td>
-                    <td data-label="Perception">
+                    <td
+                        data-label="Perception"
+                        [class.placeholder-col]="placeholderColumns.perception"
+                    >
                         <div class="status-cell">
                             <span class="status-dot" [ngClass]="app.perception"></span>
                             <span class="status-text" [ngClass]="app.perception">{{
@@ -313,18 +322,45 @@
                             }}</span>
                         </div>
                     </td>
-                    <td data-label="Uptime" [class.metric-muted]="app.uptime === null">
-                        {{ formatUptime(app.uptime) }}
+                    <td
+                        data-label="Uptime"
+                        class="prov-cell"
+                        title=""
+                        [class.metric-muted]="app.uptime === null"
+                        [attr.data-prov]="uptimeProvenance(app)"
+                    >
+                        {{ app.uptime | formatUptime }}
+                    </td>
+                    <td
+                        data-label="Maturity"
+                        class="prov-cell"
+                        title=""
+                        [class.metric-muted]="!app.maturity"
+                        [attr.data-prov]="maturityTooltip(app)"
+                    >
+                        {{ app.maturity ? app.maturity.score + '/' + app.maturity.max : '—' }}
                     </td>
                     <td data-label="Total External Users">{{ app.totalExternalUsers | number }}</td>
                     <td data-label="Total Internal Users">{{ app.totalInternalUsers | number }}</td>
-                    <td data-label="Active Users" [class.metric-muted]="app.activeUsers === null">
-                        {{ formatActiveUsers(app.activeUsers) }}
+                    <td
+                        data-label="Active Users"
+                        [class.placeholder-col]="placeholderColumns.activeUsers"
+                    >
+                        {{ app.activeUsers | formatActiveUsers }}
                     </td>
-                    <td data-label="Incidents" [class.metric-bad]="app.incidents > 0">
+                    <td
+                        data-label="Incidents"
+                        [class.metric-bad]="app.incidents > 0"
+                        [class.placeholder-col]="placeholderColumns.incidents"
+                    >
                         {{ app.incidents }}
                     </td>
-                    <td data-label="Last Incident">{{ app.lastIncident }}</td>
+                    <td
+                        data-label="Last Incident"
+                        [class.placeholder-col]="placeholderColumns.lastIncident"
+                    >
+                        {{ app.lastIncident }}
+                    </td>
                 </tr>
             </tbody>
         </table>

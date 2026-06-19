@@ -6,9 +6,10 @@ import DashboardService from './dashboard.service';
 import InMemoryPortfolioRepository from './in-memory/in-memory-portfolio.repository';
 import MongoPortfolioRepository from './mongo/mongo-portfolio.repository';
 import ApplicationsModule from '../applications/applications.module';
+import HealthSnapshotsModule from '../health-snapshots/health-snapshots.module';
 
 @Module({
-    imports: [ApplicationsModule],
+    imports: [ApplicationsModule, HealthSnapshotsModule],
     controllers: [DashboardController],
     providers: [
         DashboardService,

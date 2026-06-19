@@ -144,6 +144,15 @@
         color: #0f2148;
         transform: translateY(-1px);
     }
+
+    &:disabled {
+        cursor: not-allowed;
+        opacity: 0.4;
+    }
+
+    &:disabled:hover {
+        color: #9db0d6;
+    }
 }
 
 .header-profile {

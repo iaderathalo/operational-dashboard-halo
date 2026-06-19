@@ -13,12 +13,29 @@ export interface PortfolioApp {
     health: 'green' | 'amber' | 'red' | 'undefined';
     perception: 'green' | 'amber' | 'red' | 'undefined';
     uptime: number | null;
+    datadogMapped?: boolean;
+    resolutionPath?: 'primary' | 'fallback' | 'unmapped' | null;
+    lastSyncStatus?: 'ok' | 'error' | 'unmapped' | null;
+    lastSyncAt?: string | null;
     users: number;
     totalInternalUsers: number;
     totalExternalUsers: number;
     activeUsers: number | null;
     incidents: number;
     lastIncident: string;
+    maturity?: AppMaturity;
+}
+
+export interface AppMaturity {
+    score: number;
+    max: number;
+    signals: {
+        mapped: boolean;
+        hasMonitor: boolean;
+        hasSLO: boolean;
+        sloPassing: boolean;
+        hasOwner: boolean;
+    };
 }
 
 export interface PortfolioAppContext {

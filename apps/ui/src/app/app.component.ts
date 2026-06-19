@@ -8,11 +8,13 @@ import { filter } from 'rxjs';
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
 import environment from '../environments/environment';
-import DashboardService from './features/dashboard/services/dashboard.service';
 import DashboardDataModeService, {
     DashboardDataMode,
 } from './features/dashboard/services/dashboard-data-mode.service';
-import { PortfolioAppContext } from './features/dashboard/models/portfolio.model';
+import DashboardScopeService, {
+    DashboardScope,
+} from './features/dashboard/services/dashboard-scope.service';
+import DashboardService from './features/dashboard/services/dashboard.service';
 
 import('@mmctech/micro-lenai-webcomponent');
 
@@ -61,9 +63,13 @@ export default class AppComponent {
 
     isDashboardRoute = false;
 
+    isDetailRoute = false;
+
     headerDetailLabel = '';
 
     dataMode: DashboardDataMode;
+
+    scope: DashboardScope;
 
     private pendingHeaderDetailId = '';
 
@@ -78,15 +84,20 @@ export default class AppComponent {
      * @param {object} injector - service that provides the OktaAuth instance
      * @param {object} http - service for making HTTP requests
      * @param {object} router - service for route navigation and route state
+     * @param dashboardService
+     * @param dataModeService
+     * @param scopeService
      */
     constructor(
         public injector: Injector,
         private http: HttpClient,
         private router: Router,
         private dashboardService: DashboardService,
-        private dataModeService: DashboardDataModeService
+        private dataModeService: DashboardDataModeService,
+        private scopeService: DashboardScopeService
     ) {
         this.dataMode = this.dataModeService.currentMode;
+        this.scope = this.scopeService.currentScope;
         // the OktaAuth instance is not directly available through the constructor dependency injection. Use the injector instead
         this.oktaAuth = injector.get(OKTA_CONFIG, null)?.oktaAuth ?? null;
         this.loadHeaderUserProfile().catch(() => undefined);
@@ -110,6 +121,10 @@ export default class AppComponent {
                 this.updateHeaderContext(this.router.url);
             }
         });
+
+        this.scopeService.scope$.subscribe((scope) => {
+            this.scope = scope;
+        });
     }
 
     /**
@@ -132,7 +147,7 @@ export default class AppComponent {
      * Check if API is up and running, updates the component state based on API response.
      */
     isAPILive(): void {
-        const sub = this.http.get(`${environment.apiBaseUrl}/tasks`);
+        const sub = this.http.get(`${environment.apiBaseUrl}/health`);
         sub.subscribe({
             next: () => {
                 this.apiUnreachable = false;
@@ -177,6 +192,14 @@ export default class AppComponent {
     }
 
     /**
+     * Switches the portfolio between all applications and the user's owned apps.
+     * @param {DashboardScope} scope - selected portfolio scope
+     */
+    setScope(scope: DashboardScope): void {
+        this.scopeService.setScope(scope);
+    }
+
+    /**
      * Updates the unified header context based on the active route.
      * @param {string} url - current route URL
      */
@@ -185,6 +208,7 @@ export default class AppComponent {
         const pathSegments = normalizedUrl.split('/').filter(Boolean);
 
         this.isDashboardRoute = pathSegments[0] === 'dashboard';
+        this.isDetailRoute = false;
         this.headerDetailLabel = '';
         this.pendingHeaderDetailId = '';
 
@@ -193,6 +217,7 @@ export default class AppComponent {
         }
 
         if (pathSegments[1] === 'app' && pathSegments[2]) {
+            this.isDetailRoute = true;
             this.headerDetailLabel = 'Application Detail';
             this.loadHeaderDetailLabel(pathSegments[2]);
         }
@@ -204,8 +229,6 @@ export default class AppComponent {
      */
     private loadHeaderDetailLabel(appId: string): void {
         this.pendingHeaderDetailId = appId;
-
-        this.http;
 
         this.dashboardService.getPortfolioAppContext(appId).subscribe({
             next: (context) => {

@@ -7,12 +7,15 @@ import { Subscription } from 'rxjs';
 import {
     DashboardDetailChannelOption,
     DashboardDetailPeople,
+    DashboardDetailSource,
     DashboardDetailStatus,
     DashboardDetailView,
     DashboardDetailNotifyOption,
+    HealthSnapshot,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import {
+    buildHealthTimeline,
     cloneCheckedItems,
     DETAIL_TABS,
     DetailTabId,
@@ -21,8 +24,22 @@ import {
     IssueType,
     PERCEPTION_STATUS_LABELS,
 } from './detail-page.data';
-import DashboardService from '../../services/dashboard.service';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
+import DashboardService from '../../services/dashboard.service';
+
+/**
+ *
+ * @param source
+ */
+function buildSourceTip(source?: DashboardDetailSource): string {
+    if (source === 'datadog') {
+        return 'Live · Datadog';
+    }
+    if (source === 'planview') {
+        return 'Real · from PlanView (not Datadog)';
+    }
+    return 'Placeholder — not wired to a live source yet';
+}
 
 @Component({
     selector: 'polaris-detail-page',
@@ -59,6 +76,13 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     activePerceptionRange = '24h';
 
+    healthTimelineLive = false;
+
+    healthTimelineEmpty = false;
+
+    /** Full Health series from the backend; re-windowed by the active overview range (7-1). */
+    private healthSeries: HealthSnapshot[] = [];
+
     isSev1ModalOpen = false;
 
     modalStep = 1;
@@ -90,6 +114,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
      * @param {object} route Active route used to resolve the application id.
      * @param {object} router Router used for navigation back to the dashboard.
      * @param {object} dashboardService Service used to load detail context from the API.
+     * @param dataModeService
      */
     constructor(
         private route: ActivatedRoute,
@@ -141,6 +166,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
      */
     setOverviewRange(range: string): void {
         this.activeOverviewRange = range;
+        this.renderHealthTimeline();
     }
 
     /**
@@ -171,6 +197,13 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
         return this.healthStatusLabels[status];
     }
+
+    /**
+     * Provenance tooltip for the live-vs-placeholder dot on detail cards.
+     * @param {string} [source] Where the card's data comes from.
+     * @returns {string} Human-readable provenance for a native tooltip.
+     */
+    sourceTip = buildSourceTip;
 
     /**
      * Opens the Sev-1 workflow modal and resets it to the first step.
@@ -276,11 +309,98 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
                 this.sev1ChannelOptions = cloneCheckedItems(detail.people.sev1Channels);
                 this.updateIncidentDefaults();
                 this.isLoading = false;
+                this.loadHealthTimeline(id);
             },
             error: () => {
                 this.loadError = 'Unable to load application detail.';
                 this.isLoading = false;
             },
+        });
+    }
+
+    /**
+     * Overlays the real append-only Health timeline onto the loaded view (FR-3).
+     * Demo mode keeps the seeded showcase bars; real mode replaces them with the
+     * Datadog-backed series, falling back to an honest empty state when none yet.
+     * @param {string} id Portfolio application id from the route.
+     */
+    private loadHealthTimeline(id: string): void {
+        this.healthTimelineLive = false;
+        this.healthTimelineEmpty = false;
+
+        if (this.dataModeService.currentMode === 'demo') {
+            return;
+        }
+
+        this.dashboardService.getHealthHistory(id).subscribe({
+            next: (history) => this.applyHealthTimeline(history.points),
+            error: () => {
+                // Non-critical: leave the existing bars in place if history fails to load.
+            },
+        });
+    }
+
+    /**
+     * Applies a fetched Health series to the Health timeline row.
+     * @param {HealthSnapshot[]} points Health records for the current application.
+     */
+    private applyHealthTimeline(points: HealthSnapshot[]): void {
+        this.healthSeries = points;
+        this.renderHealthTimeline();
+    }
+
+    /**
+     * Renders the Health timeline row windowed to the active overview range (24h/7d/30d).
+     * Re-runnable on range change without re-fetching (7-1).
+     */
+    private renderHealthTimeline(): void {
+        if (!this.healthSeries.length) {
+            // Honest empty state: clear the seeded bars rather than imply false green.
+            this.view.healthTimelineBars = [];
+            this.view.timelineAxis = [];
+            this.healthTimelineLive = false;
+            this.healthTimelineEmpty = true;
+            return;
+        }
+
+        const windowed = DetailPageComponent.windowByRange(
+            this.healthSeries,
+            this.activeOverviewRange
+        );
+
+        if (!windowed.length) {
+            // Snapshots exist, but none within the selected window — honest empty for this range.
+            this.view.healthTimelineBars = [];
+            this.view.timelineAxis = [];
+            this.healthTimelineLive = false;
+            this.healthTimelineEmpty = true;
+            return;
+        }
+
+        const { bars, axis } = buildHealthTimeline(windowed);
+        this.view.healthTimelineBars = bars;
+        this.view.timelineAxis = axis;
+        this.healthTimelineLive = true;
+        this.healthTimelineEmpty = false;
+    }
+
+    /**
+     * Filters a Health series to the records within the given range (24h/7d/30d).
+     * An unknown range returns the full series.
+     * @param {HealthSnapshot[]} points Health records.
+     * @param {string} range Active range label.
+     * @returns {HealthSnapshot[]} Records recorded within the range.
+     */
+    private static windowByRange(points: HealthSnapshot[], range: string): HealthSnapshot[] {
+        const windowDays: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30 };
+        const span = windowDays[range];
+        if (!span) {
+            return points;
+        }
+        const cutoff = Date.now() - span * 24 * 60 * 60 * 1000;
+        return points.filter((point) => {
+            const recordedAt = Date.parse(point.recordedAt);
+            return Number.isNaN(recordedAt) ? true : recordedAt >= cutoff;
         });
     }
 

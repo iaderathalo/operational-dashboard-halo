@@ -2,17 +2,20 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 
+import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 import {
     DashboardDetailChannelOption,
     DashboardDetailNotifyOption,
     DashboardDetailPeople,
     DashboardDetailResponse,
+    HealthHistoryResponse,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
-import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 
+import DashboardDataModeService from './dashboard-data-mode.service';
+import DashboardScopeService from './dashboard-scope.service';
 import environment from '../../../../environments/environment';
 import { Application, DashboardSummary, Incident, Contact } from '../models/dashboard.models';
-import PORTFOLIO_DATA from '../models/portfolio.data';
+import { PORTFOLIO_DATA } from '../models/portfolio.data';
 import { PortfolioAppContext, PortfolioNode } from '../models/portfolio.model';
 import {
     createDetailView,
@@ -20,7 +23,6 @@ import {
     findAppContext,
     PEOPLE,
 } from '../pages/detail-page/detail-page.data';
-import DashboardDataModeService from './dashboard-data-mode.service';
 
 @Injectable({
     providedIn: 'root',
@@ -31,11 +33,23 @@ export default class DashboardService {
     /**
      * Creates the dashboard API client.
      * @param {object} http - HTTP client for backend requests
+     * @param dataModeService
+     * @param scopeService
      */
     constructor(
         private http: HttpClient,
-        private dataModeService: DashboardDataModeService
+        private dataModeService: DashboardDataModeService,
+        private scopeService: DashboardScopeService
     ) {}
+
+    /**
+     * Query params used to scope portfolio results. Returns `scope=mine` when the
+     * user has chosen "My Applications"; otherwise empty (all applications).
+     * @returns {object} query parameters for the dashboard API
+     */
+    private scopeParams(): Record<string, string> {
+        return this.scopeService.currentScope === 'mine' ? { scope: 'mine' } : {};
+    }
 
     /**
      * Fetches applications using optional dashboard filters.
@@ -99,7 +113,9 @@ export default class DashboardService {
             });
         }
 
-        return this.http.get<DashboardSummary>(`${this.baseUrl}/dashboard/summary`);
+        return this.http.get<DashboardSummary>(`${this.baseUrl}/dashboard/summary`, {
+            params: this.scopeParams(),
+        });
     }
 
     /**
@@ -108,10 +124,12 @@ export default class DashboardService {
      */
     getPortfolio(): Observable<PortfolioNode> {
         if (this.dataModeService.currentMode === 'demo') {
-            return of(this.cloneValue(PORTFOLIO_DATA));
+            return of(DashboardService.cloneValue(PORTFOLIO_DATA));
         }
 
-        return this.http.get<PortfolioNode>(`${this.baseUrl}/dashboard/portfolio`);
+        return this.http.get<PortfolioNode>(`${this.baseUrl}/dashboard/portfolio`, {
+            params: this.scopeParams(),
+        });
     }
 
     /**
@@ -121,7 +139,7 @@ export default class DashboardService {
      */
     getPortfolioAppContext(id: string): Observable<PortfolioAppContext> {
         if (this.dataModeService.currentMode === 'demo') {
-            return of(this.getDemoAppContext(id));
+            return of(DashboardService.getDemoAppContext(id));
         }
 
         return this.http.get<PortfolioAppContext>(
@@ -138,9 +156,9 @@ export default class DashboardService {
         if (this.dataModeService.currentMode === 'demo') {
             const detailResponse: DashboardDetailResponse = {
                 view: createDetailView(
-                    this.getDemoAppContext(id)
+                    DashboardService.getDemoAppContext(id)
                 ) as unknown as DashboardDetailResponse['view'],
-                people: this.getDemoPeople(),
+                people: DashboardService.getDemoPeople(),
             };
 
             return of(detailResponse);
@@ -148,6 +166,22 @@ export default class DashboardService {
 
         return this.http.get<DashboardDetailResponse>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/detail`
+        );
+    }
+
+    /**
+     * Fetches the append-only Health timeline for a portfolio application (FR-3).
+     * Demo mode keeps the seeded showcase bars, so it returns an empty series.
+     * @param {string} id - portfolio application id
+     * @returns {object} Health history series, newest first
+     */
+    getHealthHistory(id: string): Observable<HealthHistoryResponse> {
+        if (this.dataModeService.currentMode === 'demo') {
+            return of({ applicationId: id, points: [] });
+        }
+
+        return this.http.get<HealthHistoryResponse>(
+            `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/health-history`
         );
     }
 
@@ -235,8 +269,12 @@ export default class DashboardService {
         );
     }
 
-    private getDemoAppContext(id: string): PortfolioAppContext {
-        const portfolio = this.cloneValue(PORTFOLIO_DATA);
+    /**
+     *
+     * @param id
+     */
+    private static getDemoAppContext(id: string): PortfolioAppContext {
+        const portfolio = DashboardService.cloneValue(PORTFOLIO_DATA);
         const context = findAppContext(id, portfolio);
 
         if (context) {
@@ -249,7 +287,10 @@ export default class DashboardService {
         };
     }
 
-    private getDemoPeople(): DashboardDetailPeople {
+    /**
+     *
+     */
+    private static getDemoPeople(): DashboardDetailPeople {
         return {
             currentUser: {
                 email: environment.bypassAuth ? LOCAL_DEVELOPMENT_USER.email : '',
@@ -266,10 +307,17 @@ export default class DashboardService {
         };
     }
 
+    /**
+     *
+     */
     private getAllDemoApps(): PortfolioAppContext['app'][] {
-        return this.collectApps(this.cloneValue(PORTFOLIO_DATA));
+        return this.collectApps(DashboardService.cloneValue(PORTFOLIO_DATA));
     }
 
+    /**
+     *
+     * @param node
+     */
     private collectApps(node: PortfolioNode): PortfolioAppContext['app'][] {
         return [
             ...(node.apps || []),
@@ -277,7 +325,11 @@ export default class DashboardService {
         ];
     }
 
-    private cloneValue<T>(value: T): T {
+    /**
+     *
+     * @param value
+     */
+    private static cloneValue<T>(value: T): T {
         return JSON.parse(JSON.stringify(value)) as T;
     }
 }

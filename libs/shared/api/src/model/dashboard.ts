@@ -1,8 +1,18 @@
 /**
  * Make the dashboard model interfaces available from a single module.
  */
-import Application, { ApplicationStatus, ApplicationEnvironment, StatusOverride } from './dashboard/Application';
-import { DashboardSummary, UptimeMetrics, UserSessionMetric, HealthStatusRecord } from './dashboard/Dashboard';
+import Application, {
+    ApplicationMonitor,
+    ApplicationStatus,
+    ApplicationEnvironment,
+    StatusOverride,
+} from './dashboard/Application';
+import {
+    DashboardSummary,
+    UptimeMetrics,
+    UserSessionMetric,
+    HealthStatusRecord,
+} from './dashboard/Dashboard';
 import DashboardDetailResponse, {
     DashboardDetailActivityItem,
     DashboardDetailActivityTone,
@@ -30,6 +40,7 @@ import DashboardDetailResponse, {
     DashboardDetailLatencySeries,
     DashboardDetailMaintenanceWindow,
     DashboardDetailMetricCard,
+    DashboardDetailMonitor,
     DashboardDetailNotificationPreference,
     DashboardDetailNotifyOption,
     DashboardDetailOpenIncidents,
@@ -41,6 +52,7 @@ import DashboardDetailResponse, {
     DashboardDetailPersonCard,
     DashboardDetailRangeTimeline,
     DashboardDetailSeriesTone,
+    DashboardDetailSource,
     DashboardDetailSettings,
     DashboardDetailSharedContacts,
     DashboardDetailStatus,
@@ -52,11 +64,19 @@ import DashboardDetailResponse, {
     DashboardDetailValueTrend,
     DashboardDetailView,
 } from './dashboard/DetailPage';
-import Incident, { IncidentUpdate, CreateIncidentRequest, IncidentSeverity, IncidentStatus, BusinessImpactLevel } from './dashboard/Incident';
+import HealthSnapshot, { HealthHistoryResponse } from './dashboard/HealthSnapshot';
+import Incident, {
+    IncidentUpdate,
+    CreateIncidentRequest,
+    IncidentSeverity,
+    IncidentStatus,
+    BusinessImpactLevel,
+} from './dashboard/Incident';
 import Contact, { ContactRole, Team } from './dashboard/Team';
 
 export {
     Application,
+    ApplicationMonitor,
     ApplicationStatus,
     ApplicationEnvironment,
     StatusOverride,
@@ -93,6 +113,7 @@ export {
     DashboardDetailLatencySeries,
     DashboardDetailMaintenanceWindow,
     DashboardDetailMetricCard,
+    DashboardDetailMonitor,
     DashboardDetailNotificationPreference,
     DashboardDetailNotifyOption,
     DashboardDetailOpenIncidents,
@@ -101,6 +122,7 @@ export {
     DashboardDetailPersonCard,
     DashboardDetailRangeTimeline,
     DashboardDetailSeriesTone,
+    DashboardDetailSource,
     DashboardDetailSettings,
     DashboardDetailSharedContacts,
     DashboardDetailStatus,
@@ -121,4 +143,6 @@ export {
     UptimeMetrics,
     UserSessionMetric,
     HealthStatusRecord,
+    HealthSnapshot,
+    HealthHistoryResponse,
 };

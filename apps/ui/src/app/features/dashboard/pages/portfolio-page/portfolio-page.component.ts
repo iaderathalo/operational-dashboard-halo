@@ -3,8 +3,68 @@ import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { PortfolioNode, PortfolioApp, StatusCounts } from '../../models/portfolio.model';
-import DashboardService from '../../services/dashboard.service';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
+import DashboardScopeService from '../../services/dashboard-scope.service';
+import DashboardService from '../../services/dashboard.service';
+
+/**
+ *
+ * @param lastSyncAt
+ */
+function syncSuffix(lastSyncAt?: string | null): string {
+    if (!lastSyncAt) {
+        return '';
+    }
+
+    const then = new Date(lastSyncAt).getTime();
+    if (Number.isNaN(then)) {
+        return '';
+    }
+
+    const minutes = Math.max(0, Math.round((Date.now() - then) / 60000));
+    if (minutes < 1) {
+        return ' · synced <1 min ago';
+    }
+    if (minutes < 60) {
+        return ` · synced ${minutes} min ago`;
+    }
+
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) {
+        return ` · synced ${hours} h ago`;
+    }
+
+    return ` · synced ${Math.round(hours / 24)} d ago`;
+}
+
+/**
+ *
+ * @param app
+ */
+function buildHealthProvenance(app: PortfolioApp): string {
+    if (app.lastSyncStatus === 'error') {
+        return 'Stale — last Datadog sync failed';
+    }
+
+    if (app.datadogMapped === false || app.resolutionPath === 'unmapped') {
+        return 'Not mapped in Datadog — health unavailable';
+    }
+
+    const via = app.resolutionPath === 'fallback' ? ' (fallback)' : '';
+    return `Live · Datadog${via}${syncSuffix(app.lastSyncAt)}`;
+}
+
+/**
+ *
+ * @param app
+ */
+function buildUptimeProvenance(app: PortfolioApp): string {
+    if (app.uptime === null) {
+        return 'No SLO in Datadog — uptime unavailable';
+    }
+
+    return `Live · Datadog SLO${syncSuffix(app.lastSyncAt)}`;
+}
 
 const EMPTY_PORTFOLIO_NODE: PortfolioNode = {
     id: 'root',
@@ -44,6 +104,8 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
     private modeSubscription?: Subscription;
 
+    private scopeSubscription?: Subscription;
+
     private readonly statusOrder: Array<PortfolioApp['health']> = [
         'green',
         'amber',
@@ -57,25 +119,48 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         green: 'GREEN',
         amber: 'AMBER',
         red: 'RED',
-        undefined: 'UNDEFINED',
+        undefined: 'Not monitored',
     };
 
     private readonly perceptionLabels: Record<PortfolioApp['perception'], string> = {
         green: 'GREEN',
         amber: 'AMBER',
         red: 'CRITICAL',
-        undefined: 'UNDEFINED',
+        undefined: 'Not monitored',
+    };
+
+    private readonly maturitySignalLabels: Record<string, string> = {
+        mapped: 'Mapped to Datadog',
+        hasMonitor: 'Has monitors',
+        hasSLO: 'Has SLO',
+        sloPassing: 'SLO passing',
+        hasOwner: 'Has owner',
+    };
+
+    /**
+     * Columns that are still placeholder (not yet wired to a live source) and are
+     * rendered greyed out. Flip a flag to `false` as each column goes live so the
+     * dimming disappears on its own. Health/Uptime are live Datadog and never here.
+     */
+    readonly placeholderColumns = {
+        perception: true,
+        activeUsers: true,
+        incidents: true,
+        lastIncident: true,
     };
 
     /**
      * Creates the portfolio page controller.
      * @param {object} router - router used for dashboard detail navigation
      * @param {object} dashboardService - service used to load dashboard data from the API
+     * @param dataModeService
+     * @param scopeService
      */
     constructor(
         private router: Router,
         private dashboardService: DashboardService,
-        private dataModeService: DashboardDataModeService
+        private dataModeService: DashboardDataModeService,
+        private scopeService: DashboardScopeService
     ) {}
 
     /**
@@ -84,6 +169,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.updateViewportState();
         this.modeSubscription = this.dataModeService.mode$.subscribe(() => this.loadPortfolio());
+        this.scopeSubscription = this.scopeService.scope$.subscribe(() => this.loadPortfolio());
     }
 
     /**
@@ -91,6 +177,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
      */
     ngOnDestroy(): void {
         this.modeSubscription?.unsubscribe();
+        this.scopeSubscription?.unsubscribe();
     }
 
     /**
@@ -143,13 +230,20 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         return 'undefined';
     }
 
-    formatUptime(uptime: number | null): string {
-        return uptime === null ? 'Undefined' : `${uptime}%`;
-    }
+    /**
+     * Provenance tooltip for the Health column: whether the value is live Datadog,
+     * stale (last sync failed), or simply not mapped to Datadog.
+     * @param {object} app - portfolio application
+     * @returns {string} human-readable provenance for a native tooltip
+     */
+    healthProvenance = buildHealthProvenance;
 
-    formatActiveUsers(activeUsers: number | null): string {
-        return activeUsers === null ? 'Undefined' : activeUsers.toLocaleString();
-    }
+    /**
+     * Provenance tooltip for the Uptime column (Datadog SLO, or no SLO mapped).
+     * @param {object} app - portfolio application
+     * @returns {string} human-readable provenance for a native tooltip
+     */
+    uptimeProvenance = buildUptimeProvenance;
 
     /**
      * Determines the overall status for a portfolio node.
@@ -305,6 +399,20 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Builds a per-signal breakdown tooltip for the maturity score.
+     * @param {PortfolioApp} app - portfolio app
+     * @returns {string} breakdown like "✓ Mapped to Datadog · ✗ Has SLO ..."
+     */
+    maturityTooltip(app: PortfolioApp): string {
+        if (!app.maturity) {
+            return 'No maturity data';
+        }
+        return Object.entries(app.maturity.signals)
+            .map(([key, met]) => `${met ? '✓' : '✗'} ${this.maturitySignalLabels[key] ?? key}`)
+            .join(' · ');
+    }
+
+    /**
      * Expands the relevant section panels for the active node.
      * @param {object} node - active portfolio node
      */
@@ -352,12 +460,13 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Expands the initial tree levels after the portfolio payload loads.
+     * Expands only the root node on load — the tree is collapsed by default
+     * (Anand feedback 2026-06-18); deeper levels expand on demand.
      * @param {object} node - portfolio node to expand
      * @param {number} depth - current tree depth
      */
     private initializeExpandedTreeNodes(node: PortfolioNode, depth = 0): void {
-        if (depth > 2) {
+        if (depth > 0) {
             return;
         }
 

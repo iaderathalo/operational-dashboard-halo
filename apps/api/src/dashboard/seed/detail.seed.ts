@@ -1,8 +1,11 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import LOCAL_DEVELOPMENT_USER from '@operational-dashboard/shared-api-model/model/common/LocalDevelopmentUser';
 import {
+    ApplicationMonitor,
+    ApplicationStatus,
     DashboardDetailContactEntry,
     DashboardDetailContacts,
+    DashboardDetailMonitor,
     DashboardDetailPeople,
     DashboardDetailResponse,
     DashboardDetailStatus,
@@ -32,14 +35,14 @@ const HEADER_HEALTH_LABELS: Record<DashboardDetailStatus, string> = {
     green: 'Healthy',
     amber: 'Degraded',
     red: 'Critical',
-    undefined: 'Undefined',
+    undefined: 'Not monitored',
 };
 
 const HEADER_PERCEPTION_LABELS: Record<DashboardDetailStatus, string> = {
     green: 'Experience Stable',
     amber: 'Perception Slow',
     red: 'Perception Critical',
-    undefined: 'Perception Undefined',
+    undefined: 'Not monitored',
 };
 
 const USERS_TIMELINE = [
@@ -299,12 +302,37 @@ const buildIncidentTrendText = (count: number): string => {
 
 const resolveTier = (uptime: number): number => (uptime >= 99.95 ? 1 : 2);
 
+/**
+ * Maps remaining error-budget percentage to a status colour: greener with more
+ * headroom, red when nearly exhausted, grey when there is no SLO to measure.
+ * @param {number | null} pct - remaining error budget percentage, or null
+ * @returns {string} detail status colour
+ */
+const resolveErrorBudgetColor = (pct: number | null): DashboardDetailStatus => {
+    if (pct == null) {
+        return 'undefined';
+    }
+
+    if (pct < 5) {
+        return 'red';
+    }
+
+    if (pct < 20) {
+        return 'amber';
+    }
+
+    return 'green';
+};
+
 const createOverviewMetrics = (
     uptimeValue: string,
     perception: DashboardDetailStatus,
     usersValue: string,
     incidentCount: number,
-    activeDriftModels: number
+    activeDriftModels: number,
+    errorBudgetValue: string,
+    errorBudgetColor: DashboardDetailStatus,
+    errorBudgetTrendText: string
 ): DashboardDetailView['overviewMetrics'] => [
     {
         label: 'Uptime (30d)',
@@ -312,6 +340,7 @@ const createOverviewMetrics = (
         color: 'green',
         trend: 'up',
         trendText: '▲ 0.02% vs 7d avg',
+        source: 'datadog',
     },
     {
         label: 'Perception Score',
@@ -319,6 +348,7 @@ const createOverviewMetrics = (
         color: perception,
         trend: 'down',
         trendText: '▼ 8 pts from baseline',
+        source: 'placeholder',
     },
     {
         label: 'Active Users',
@@ -326,6 +356,7 @@ const createOverviewMetrics = (
         color: 'green',
         trend: 'up',
         trendText: '▲ 12% vs avg',
+        source: 'planview',
     },
     {
         label: 'Open Incidents',
@@ -333,13 +364,15 @@ const createOverviewMetrics = (
         color: incidentCount > 0 ? 'amber' : 'green',
         trend: 'neutral',
         trendText: buildIncidentTrendText(incidentCount),
+        source: 'placeholder',
     },
     {
         label: 'Error Budget',
-        value: '18 min',
-        color: 'green',
+        value: errorBudgetValue,
+        color: errorBudgetColor,
         trend: 'neutral',
-        trendText: 'of 22 min remaining',
+        trendText: errorBudgetTrendText,
+        source: 'datadog',
     },
     {
         label: 'AI Tokens',
@@ -347,6 +380,7 @@ const createOverviewMetrics = (
         color: 'amber',
         trend: 'down',
         trendText: '$48.72 of $250.00 budget',
+        source: 'placeholder',
     },
     {
         label: 'AI Drift',
@@ -354,6 +388,7 @@ const createOverviewMetrics = (
         color: 'amber',
         trend: 'down',
         trendText: activeDriftModels > 0 ? 'Models drifting' : 'All stable',
+        source: 'placeholder',
     },
     {
         label: 'Infra Cost MTD',
@@ -361,17 +396,24 @@ const createOverviewMetrics = (
         color: 'red',
         trend: 'down',
         trendText: '▲ 8.1% vs last month',
+        source: 'placeholder',
     },
 ];
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-const UNDEFINED_TEXT = 'Undefined';
+const NO_DATA_TEXT = 'No data';
 const TBD_TEXT = 'TBD';
+
+// Distinguishes the two missing-data causes for Datadog-sourced metrics: an app
+// that isn't mapped in Datadog ("Not monitored") vs a mapped app whose metric has
+// no value yet ("No data"). Keeps a missing signal from reading as an outage.
+const missingDatadog = (datadogMapped?: boolean): string =>
+    datadogMapped ? NO_DATA_TEXT : 'Not monitored';
 
 const getText = (value?: string | null): string => String(value || '').trim();
 
-const getDisplayText = (value?: string | null, fallback = UNDEFINED_TEXT): string => {
+const getDisplayText = (value?: string | null, fallback = NO_DATA_TEXT): string => {
     const text = getText(value);
 
     return text || fallback;
@@ -382,6 +424,47 @@ const getOptionalText = (value?: string | null): string | undefined => {
 
     return text || undefined;
 };
+
+const MONITOR_STATUS_TONE: Record<ApplicationStatus, DashboardDetailStatus> = {
+    GREEN: 'green',
+    AMBER: 'amber',
+    RED: 'red',
+};
+
+/**
+ * Strip Datadog template noise ({{...}}) + HTML tags and trim a message for display.
+ * @param message
+ */
+const cleanMonitorMessage = (message: string): string =>
+    message
+        .replace(/\{\{[^}]*\}\}/g, ' ') // Datadog template conditionals/vars
+        .replace(/<[^>]+>/g, ' ') // HTML the message body carries (e.g. <br />)
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+/**
+ * Format an ISO last-change timestamp as "YYYY-MM-DD HH:MM UTC", else Undefined.
+ * @param iso
+ */
+const formatLastTriggered = (iso: string | null): string => {
+    if (!iso) return NO_DATA_TEXT;
+    const m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    return m ? `${m[1]} ${m[2]} UTC` : iso;
+};
+
+/**
+ * Map the persisted per-app monitor breakdown to the detail view shape (#2).
+ * @param monitors
+ */
+const buildMonitorCards = (monitors?: ApplicationMonitor[]): DashboardDetailMonitor[] =>
+    (monitors ?? []).map((monitor) => ({
+        name: monitor.name,
+        status: MONITOR_STATUS_TONE[monitor.status] ?? 'undefined',
+        message: cleanMonitorMessage(monitor.message),
+        lastTriggered: formatLastTriggered(monitor.lastTriggeredAt),
+        inMaintenance: Boolean(monitor.inMaintenance),
+    }));
 
 const createContactEntry = (
     label: string,
@@ -395,7 +478,7 @@ const createContactEntry = (
     return {
         label,
         value: normalizedValue,
-        ...(normalizedSecondary || (missingSecondaryText && normalizedValue !== UNDEFINED_TEXT)
+        ...(normalizedSecondary || (missingSecondaryText && normalizedValue !== NO_DATA_TEXT)
             ? {
                   secondary: normalizedSecondary || missingSecondaryText,
               }
@@ -420,7 +503,7 @@ const createDashboardContacts = (app: PortfolioAppContext['app']): DashboardDeta
         },
         { label: 'IT Controls', value: getDisplayText(app.amsSupport?.itControls) },
     ],
-    escalationPath: UNDEFINED_TEXT,
+    escalationPath: NO_DATA_TEXT,
     team: [
         createContactEntry(
             'Portfolio Owner',
@@ -455,9 +538,24 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
     const { app, path } = context;
     const scope = path[path.length - 1];
     const usersValue = app.users.toLocaleString();
-    const uptimeValue = `${app.uptime}%`;
+    const uptimeValue =
+        app.uptime != null ? `${app.uptime.toFixed(2)}%` : missingDatadog(app.datadogMapped);
+    const uptimeReason = app.datadogMapped ? 'No SLO reported yet' : 'Not mapped in Datadog';
     const incidentCount = app.incidents;
     const activeDriftModels = 1;
+
+    // Error budget + SLA target are live from the Crawler (errorBudgetRemainingPct,
+    // slaTarget on Application); render them honestly as a percentage rather than
+    // the old fabricated "18 min / 22 min" figures.
+    const errorBudgetPct = app.errorBudgetRemainingPct ?? null;
+    const errorBudgetRemaining =
+        errorBudgetPct != null
+            ? `${errorBudgetPct.toFixed(1)}%`
+            : missingDatadog(app.datadogMapped);
+    const slaTargetValue =
+        app.slaTarget != null ? `${app.slaTarget}%` : missingDatadog(app.datadogMapped);
+    const errorBudgetTrendText =
+        app.slaTarget != null ? `SLA target ${app.slaTarget}%` : 'No SLO data';
 
     const view: DashboardDetailView = {
         name: app.name,
@@ -476,16 +574,19 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
         uptime: {
             value: uptimeValue,
             trend: 'up',
-            trendText: '▲ 0.02% vs 7d avg',
+            trendText: app.uptime != null ? '▲ 0.02% vs 7d avg' : uptimeReason,
         },
-        slaTarget: '99.95%',
+        slaTarget: slaTargetValue,
         errorBudget: {
-            remaining: '18 min',
-            total: '22 min',
-            used: '4 min',
-            pct: 82,
-            burnRate: '0.6 min/day',
-            breach: 'Never (at current rate)',
+            remaining: errorBudgetRemaining,
+            total: 'error budget',
+            used:
+                errorBudgetPct != null
+                    ? `${(100 - errorBudgetPct).toFixed(1)}%`
+                    : missingDatadog(app.datadogMapped),
+            pct: errorBudgetPct != null ? Math.round(errorBudgetPct) : 0,
+            burnRate: missingDatadog(app.datadogMapped),
+            breach: missingDatadog(app.datadogMapped),
         },
         activeUsers: {
             value: usersValue,
@@ -548,6 +649,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             { name: 'Memory Usage < 85%', ok: true, time: '72%' },
             { name: 'TLS Certificate Valid', ok: true, time: '33 days' },
         ],
+        monitors: buildMonitorCards(app.monitors),
         healthEvents: [
             {
                 time: 'Mar 05 12:00',
@@ -956,7 +1058,10 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             app.perception,
             usersValue,
             incidentCount,
-            activeDriftModels
+            activeDriftModels,
+            errorBudgetRemaining,
+            resolveErrorBudgetColor(errorBudgetPct),
+            errorBudgetTrendText
         ),
     };
 

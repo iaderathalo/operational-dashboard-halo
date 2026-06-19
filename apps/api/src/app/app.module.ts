@@ -8,6 +8,7 @@ import AppController from './app.controller';
 import AppService from './app.service';
 import ApplicationsModule from '../applications/applications.module';
 import DashboardModule from '../dashboard/dashboard.module';
+import DatadogModule from '../datadog/datadog.module';
 import HealthModule from '../health/health.module';
 import IncidentsModule from '../incidents/incidents.module';
 import TasksModule from '../tasks/tasks.module';
@@ -26,6 +27,12 @@ export const configSchema = Joi.object({
     PORT: Joi.number().integer().default(8080),
     APIGEE_ORGANIZATION: Joi.string().required(),
     APIGEE_CLIENT_ID: Joi.string().required(),
+    DATADOG_SITE: Joi.string(),
+    DATADOG_BASE_URL: Joi.string(),
+    DATADOG_API_KEY: Joi.string(),
+    DATADOG_APP_KEY: Joi.string(),
+    INTERNAL_SYNC_TOKEN: Joi.string(),
+    PORTFOLIO_OPCO_ALLOWLIST: Joi.string(),
 });
 
 @Module({
@@ -41,6 +48,7 @@ export const configSchema = Joi.object({
         TasksModule,
         TeamsModule,
         HealthModule,
+        DatadogModule,
     ],
     controllers: [AppController],
     providers: [

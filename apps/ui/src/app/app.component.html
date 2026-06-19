@@ -42,6 +42,42 @@
                     </div>
                 </div>
 
+                <div class="header-data-mode" *ngIf="dataMode === 'real'">
+                    <span class="header-data-mode-label">View</span>
+                    <div
+                        class="header-data-mode-toggle"
+                        role="group"
+                        aria-label="Application scope"
+                    >
+                        <button
+                            type="button"
+                            class="header-data-mode-button"
+                            [class.active]="scope === 'all'"
+                            [attr.aria-pressed]="scope === 'all'"
+                            [disabled]="isDetailRoute"
+                            [attr.title]="
+                                isDetailRoute ? 'Scope applies to the portfolio list' : null
+                            "
+                            (click)="setScope('all')"
+                        >
+                            All Applications
+                        </button>
+                        <button
+                            type="button"
+                            class="header-data-mode-button"
+                            [class.active]="scope === 'mine'"
+                            [attr.aria-pressed]="scope === 'mine'"
+                            [disabled]="isDetailRoute"
+                            [attr.title]="
+                                isDetailRoute ? 'Scope applies to the portfolio list' : null
+                            "
+                            (click)="setScope('mine')"
+                        >
+                            My Applications
+                        </button>
+                    </div>
+                </div>
+
                 <div class="header-profile" (click)="$event.stopPropagation()">
                     <button
                         type="button"

@@ -9,7 +9,8 @@ const ACTIVE_STATUSES = new Set(['In Production', 'In Development']);
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.PLANVIEW_DRY_RUN === 'true';
 const REPLACE_COLLECTION = process.env.PLANVIEW_REPLACE_COLLECTION !== 'false';
 const SOURCE_FILE =
-    process.env.PLANVIEW_SOURCE_FILE || path.join(__dirname, 'PlanviewData_Dremio_CAI_Applications.json');
+    process.env.PLANVIEW_SOURCE_FILE ||
+    path.join(__dirname, 'PlanviewData_Dremio_CAI_Applications.json');
 const MONGO_URI =
     process.env.MONGODB_URI ||
     process.env.API_MONGODB_API_DB_URL ||
@@ -55,15 +56,20 @@ const normalizeRawExport = (rawContent) => rawContent.replace(/}\s*{/g, '},\n{')
 
 const mapApplication = (record, nowIso) => {
     const businessUnit =
-        record.BusinessDeliveryPortfolioName || record.OwningOrganization || record.OpCo || 'Unknown';
+        record.BusinessDeliveryPortfolioName ||
+        record.OwningOrganization ||
+        record.OpCo ||
+        'Unknown';
     const lifecycleStatus = record.Status === 'In Development' ? 'DEVELOPMENT' : 'PRODUCTION';
-    const currentUserCount = parseCount(record.InternalUserCount) + parseCount(record.ExternalUserCount);
+    const currentUserCount =
+        parseCount(record.InternalUserCount) + parseCount(record.ExternalUserCount);
 
     return {
         name: record.ProductName,
         shortCode: record.CASTKey || record.ProductCode,
         description:
-            record.LongDescription || `${record.ProductName} imported from PlanView EA application export`,
+            record.LongDescription ||
+            `${record.ProductName} imported from PlanView EA application export`,
         environment: lifecycleStatus,
         tier: parseTier(record.DrTier),
         businessUnit,
@@ -102,6 +108,11 @@ const mapApplication = (record, nowIso) => {
         dataClassification: record.DataClassification || null,
         hosting: record.Hosting || null,
         owningOrganization: record.OwningOrganization || null,
+        // Preserve PlanView's structured hierarchy fields instead of flattening
+        // them into `businessUnit`, so the dashboard can roll up by the source's
+        // own taxonomy (operating company -> delivery portfolio) without re-deriving it.
+        opCo: record.OpCo || null,
+        businessDeliveryPortfolio: record.BusinessDeliveryPortfolioName || null,
     };
 };
 
@@ -112,7 +123,10 @@ const loadApplicationsFromFile = () => {
 
     return parsed
         .filter((record) => ACTIVE_STATUSES.has(record.Status))
-        .filter((record) => record.ProductName && (record.CASTKey || record.ProductCode) && record.InternalID)
+        .filter(
+            (record) =>
+                record.ProductName && (record.CASTKey || record.ProductCode) && record.InternalID
+        )
         .map((record) => mapApplication(record, nowIso));
 };
 
@@ -130,7 +144,15 @@ const main = async () => {
         console.log(`Target collection: ${collectionName}`);
         console.log(`Status breakdown: ${JSON.stringify(byStatus)}`);
         console.log(
-            `Sample records: ${JSON.stringify(documents.slice(0, 3).map((document) => ({ name: document.name, shortCode: document.shortCode, planviewInternalId: document.planviewInternalId })), null, 2)}`
+            `Sample records: ${JSON.stringify(
+                documents.slice(0, 3).map((document) => ({
+                    name: document.name,
+                    shortCode: document.shortCode,
+                    planviewInternalId: document.planviewInternalId,
+                })),
+                null,
+                2
+            )}`
         );
         return;
     }

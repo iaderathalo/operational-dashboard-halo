@@ -56,7 +56,14 @@
             <div class="tab-panel" [class.active]="activeTab === 'overview'">
                 <div class="metrics-row overview-metrics">
                     <div *ngFor="let metric of view.overviewMetrics" class="metric-card">
-                        <div class="metric-label">{{ metric.label }}</div>
+                        <div class="metric-label">
+                            {{ metric.label }}
+                            <span
+                                class="src-dot"
+                                [ngClass]="metric.source || 'placeholder'"
+                                [attr.data-tip]="sourceTip(metric.source)"
+                            ></span>
+                        </div>
                         <div
                             class="metric-value"
                             [ngClass]="metric.color ? 'value-' + metric.color : ''"
@@ -152,11 +159,23 @@
                         <span><span class="legend-dot red"></span>Red</span>
                         <span><span class="legend-dot grey"></span>Incident</span>
                     </div>
+                    <div class="timeline-note" *ngIf="healthTimelineLive">
+                        <span class="live-dot"></span>Health timeline · live Datadog
+                    </div>
+                    <div class="timeline-note" *ngIf="healthTimelineEmpty">
+                        No Datadog health history yet — bars appear after the next sync.
+                    </div>
                 </div>
 
                 <div class="two-col">
                     <div class="card">
-                        <div class="card-title">Feature Health Summary</div>
+                        <div class="card-title">
+                            Feature Health Summary
+                            <span
+                                class="src-dot placeholder"
+                                [attr.data-tip]="sourceTip('placeholder')"
+                            ></span>
+                        </div>
                         <div class="table-scroll">
                             <table class="ftable">
                                 <thead>
@@ -212,7 +231,13 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-title">Recent Activity</div>
+                        <div class="card-title">
+                            Recent Activity
+                            <span
+                                class="src-dot placeholder"
+                                [attr.data-tip]="sourceTip('placeholder')"
+                            ></span>
+                        </div>
                         <div class="activity-log">
                             <div *ngFor="let item of view.activityLog" class="activity-item">
                                 <span class="activity-dot" [ngClass]="item.color"></span>
@@ -226,7 +251,10 @@
 
             <div class="tab-panel" [class.active]="activeTab === 'health'">
                 <div class="card">
-                    <div class="card-title">Health Status Timeline</div>
+                    <div class="card-title">
+                        Health Status Timeline
+                        <span class="src-dot datadog" [attr.data-tip]="sourceTip('datadog')"></span>
+                    </div>
                     <div
                         *ngFor="let row of view.healthRangeTimelines"
                         class="timeline-row range-row"
@@ -240,7 +268,13 @@
 
                 <div class="two-col">
                     <div class="card">
-                        <div class="card-title">Uptime &amp; Error Budget</div>
+                        <div class="card-title">
+                            Uptime &amp; Error Budget
+                            <span
+                                class="src-dot datadog"
+                                [attr.data-tip]="sourceTip('datadog')"
+                            ></span>
+                        </div>
                         <div class="metric-pair-grid">
                             <div>
                                 <span class="metric-caption">Current (30d)</span>
@@ -267,7 +301,13 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-title">Health Check Breakdown</div>
+                        <div class="card-title">
+                            Health Check Breakdown
+                            <span
+                                class="src-dot placeholder"
+                                [attr.data-tip]="sourceTip('placeholder')"
+                            ></span>
+                        </div>
                         <div class="health-checks">
                             <div
                                 *ngFor="let check of view.healthChecks"
@@ -287,9 +327,46 @@
                     </div>
                 </div>
 
+                <div class="card">
+                    <div class="card-title">
+                        Datadog Monitors
+                        <span class="src-dot datadog" [attr.data-tip]="sourceTip('datadog')"></span>
+                    </div>
+                    <div class="monitor-list" *ngIf="view.monitors.length; else noMonitors">
+                        <div *ngFor="let monitor of view.monitors" class="monitor-row">
+                            <span class="mon-dot" [ngClass]="monitor.status"></span>
+                            <div class="mon-body">
+                                <div class="mon-head">
+                                    <span class="mon-name">
+                                        {{ monitor.name }}
+                                        <span class="mon-maint" *ngIf="monitor.inMaintenance"
+                                            >Maintenance</span
+                                        >
+                                    </span>
+                                    <span class="mon-time">{{ monitor.lastTriggered }}</span>
+                                </div>
+                                <div class="mon-message" *ngIf="monitor.message">
+                                    {{ monitor.message }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <ng-template #noMonitors>
+                        <div class="monitor-empty">
+                            No Datadog monitors mapped to this application.
+                        </div>
+                    </ng-template>
+                </div>
+
                 <div class="two-col">
                     <div class="card chart-card">
-                        <div class="card-title">Response Time (P50 / P90 / P99) — 24h</div>
+                        <div class="card-title">
+                            Response Time (P50 / P90 / P99) — 24h
+                            <span
+                                class="src-dot placeholder"
+                                [attr.data-tip]="sourceTip('placeholder')"
+                            ></span>
+                        </div>
                         <div class="chart-stack">
                             <div
                                 *ngFor="let series of view.responseLatencySeries"
@@ -308,7 +385,13 @@
                     </div>
 
                     <div class="card chart-card">
-                        <div class="card-title">Error Rate — 24h</div>
+                        <div class="card-title">
+                            Error Rate — 24h
+                            <span
+                                class="src-dot placeholder"
+                                [attr.data-tip]="sourceTip('placeholder')"
+                            ></span>
+                        </div>
                         <div class="chart-series-bars single-series">
                             <span
                                 *ngFor="let bar of view.errorRateBars"
@@ -324,7 +407,13 @@
                 </div>
 
                 <div class="card">
-                    <div class="card-title">Recent Health Events</div>
+                    <div class="card-title">
+                        Recent Health Events
+                        <span
+                            class="src-dot placeholder"
+                            [attr.data-tip]="sourceTip('placeholder')"
+                        ></span>
+                    </div>
                     <div class="table-scroll">
                         <table class="ftable">
                             <thead>

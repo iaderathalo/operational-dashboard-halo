@@ -53,7 +53,7 @@
     "database": [
         {
             "name": "db-execution",
-            "deploydb": false,
+            "deploydb": true,
             "jobs": {
                 "monitor-rollout": true,
                 "preemptive-delete": true,

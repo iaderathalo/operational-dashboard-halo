@@ -15,6 +15,7 @@ describe('configSchema', () => {
         BUILD_VERSION: 'test version',
         APIGEE_ORGANIZATION: 'test-org',
         APIGEE_CLIENT_ID: 'test-client-id',
+        USE_REAL_DATA: 'false',
     };
 
     it('parses valid values', () => {
