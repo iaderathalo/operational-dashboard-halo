@@ -9,7 +9,13 @@ import { ResilientHttpService } from '@operational-dashboard/shared-nestjs-utils
 
 import { DatadogClient } from './datadog-client';
 import InMemoryDatadogSnapshot from './datadog-snapshot';
-import { DatadogMonitor, DatadogSloSummary, DatadogSnapshot } from './datadog.types';
+import {
+    DatadogMonitor,
+    DatadogSloSummary,
+    DatadogSnapshot,
+    DatadogSyntheticCheck,
+} from './datadog.types';
+import { hasKeptTag, isKeptTag, mapWithConcurrency, rateLimitWaitMs } from './datadog.utils';
 
 const DAY_SECONDS = 86400;
 
@@ -27,18 +33,28 @@ const MAX_PAGES = 1000;
 const SLO_HISTORY_CONCURRENCY = 6;
 /** Max 429 retries per individual history request before giving up on that window. */
 const MAX_RATE_LIMIT_RETRIES = 5;
-/** Base for the exponential 429 backoff (ms) when no Retry-After header is present. */
-const RATE_LIMIT_BACKOFF_BASE_MS = 1000;
-/** Ceiling for any single backoff sleep (ms) so a bogus header can't stall the run. */
-const RATE_LIMIT_BACKOFF_MAX_MS = 30000;
 
-/** Only SLOs carrying one of these tag keys are kept (and indexed) in the snapshot. */
-const KEPT_SLO_TAG_KEYS = ['app_short_key', 'app_service_id'];
+/** Synthetic public_ids per POST /synthetics/tests/uptimes — keeps request bodies bounded. */
+const SYNTHETIC_UPTIMES_BATCH = 50;
 
 interface RawSlo {
     id: string;
     tags?: string[];
     thresholds?: Array<{ target?: number }>;
+}
+
+interface RawSyntheticTest {
+    public_id?: string;
+    name?: string;
+    type?: string;
+    status?: string;
+    tags?: string[];
+}
+
+/** One item of the POST /synthetics/tests/uptimes response array (validated live). */
+interface RawUptime {
+    public_id?: string;
+    overall?: { uptime?: number; errors?: unknown[] | null };
 }
 
 /**
@@ -59,7 +75,7 @@ interface RawSlo {
 @Injectable()
 export default class RealDatadogClient implements DatadogClient {
     /**
-     *
+     * Creates a RealDatadogClient.
      * @param http
      * @param logger
      */
@@ -83,14 +99,121 @@ export default class RealDatadogClient implements DatadogClient {
         const keptSlos = await this.fetchKeptSlos();
         const sloByTag = await this.buildSloIndex(keptSlos);
 
+        const syntheticsByTag = await this.fetchSyntheticsIndex();
+
         this.logger.info('Datadog snapshot loaded', {
             monitors: monitors.length,
             monitorTagBuckets: monitorsByTag.size,
             keptSlos: keptSlos.length,
             sloTagBuckets: sloByTag.size,
+            syntheticTagBuckets: syntheticsByTag.size,
         });
 
-        return new InMemoryDatadogSnapshot(monitorsByTag, sloByTag);
+        return new InMemoryDatadogSnapshot(monitorsByTag, sloByTag, syntheticsByTag);
+    }
+
+    /**
+     * Fetches all Synthetic tests (GET /api/v1/synthetics/tests), keeps only those tagged
+     * app_short_key:/app_service_id: (the only ones an Application can resolve to), and
+     * indexes each kept test under each of its kept tags so either identifier resolves
+     * it. Mirrors fetchKeptSlos + buildSloIndex. The v1 list endpoint returns every test
+     * in one response, so there is no paging here. A 2xx whose body has a non-array
+     * `tests` is a hard error — coercing it to [] would silently drop all checks.
+     * @returns {Promise<Map<string, DatadogSyntheticCheck[]>>} the `${tagKey}:${tagValue}` -> checks index
+     */
+    private async fetchSyntheticsIndex(): Promise<Map<string, DatadogSyntheticCheck[]>> {
+        const resp = await this.getWithRateLimitRetry<{ tests?: RawSyntheticTest[] }>(
+            '/api/v1/synthetics/tests',
+            {}
+        );
+        const tests = resp.data?.tests;
+        if (!Array.isArray(tests)) {
+            throw new Error('Datadog /api/v1/synthetics/tests returned a non-array tests body');
+        }
+
+        const keptTests = tests.filter((t) => t?.public_id && hasKeptTag(t.tags));
+        const uptimes = await this.fetchUptimes(keptTests.map((t) => t.public_id as string));
+        const kept = keptTests.map((t) => ({
+            check: {
+                publicId: t.public_id as string,
+                name: t.name ?? '',
+                type: t.type ?? '',
+                status: t.status ?? '',
+                uptime: uptimes.get(t.public_id as string) ?? null,
+            },
+            tags: t.tags ?? [],
+        }));
+
+        const index = new Map<string, DatadogSyntheticCheck[]>();
+        kept.forEach(({ check, tags }) => {
+            const seen = new Set<string>();
+            tags.filter((tag) => isKeptTag(tag)).forEach((tag) => {
+                const key = tag.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                const bucket = index.get(key);
+                if (bucket) bucket.push(check);
+                else index.set(key, [check]);
+            });
+        });
+        return index;
+    }
+
+    /**
+     * Resolves 30-day uptime for every kept Synthetic test via batched POSTs to
+     * /synthetics/tests/uptimes (validated shape: a JSON array of
+     * `{ public_id, overall: { uptime, errors } }`). Batches run under the same bounded
+     * concurrency as SLO history. A test whose window has no data (overall.errors set —
+     * e.g. ALL_NO_DATA, common for paused tests) maps to null, never a misleading 0%.
+     * @param {string[]} publicIds - the kept tests' public ids
+     * @returns {Promise<Map<string, number | null>>} publicId -> 30d uptime % (or null)
+     */
+    private async fetchUptimes(publicIds: string[]): Promise<Map<string, number | null>> {
+        const out = new Map<string, number | null>();
+        if (publicIds.length === 0) return out;
+
+        const batches: string[][] = [];
+        for (let i = 0; i < publicIds.length; i += SYNTHETIC_UPTIMES_BATCH) {
+            batches.push(publicIds.slice(i, i + SYNTHETIC_UPTIMES_BATCH));
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const batchMaps = await mapWithConcurrency(batches, SLO_HISTORY_CONCURRENCY, (ids) =>
+            this.fetchUptimeBatch(ids, now)
+        );
+        batchMaps.forEach((batchMap) => batchMap.forEach((value, key) => out.set(key, value)));
+        return out;
+    }
+
+    /**
+     * Fetches uptime for one batch of public ids. A failed batch yields an empty map (its
+     * checks fall back to null uptime) rather than sinking the whole run.
+     * @param {string[]} ids - up to SYNTHETIC_UPTIMES_BATCH public ids
+     * @param {number} now - window end (epoch seconds)
+     * @returns {Promise<Map<string, number | null>>} publicId -> 30d uptime % (or null)
+     */
+    private async fetchUptimeBatch(
+        ids: string[],
+        now: number
+    ): Promise<Map<string, number | null>> {
+        const map = new Map<string, number | null>();
+        try {
+            const resp = await this.postWithRateLimitRetry<RawUptime[]>(
+                '/api/v1/synthetics/tests/uptimes',
+                { from_ts: now - 30 * DAY_SECONDS, to_ts: now, public_ids: ids }
+            );
+            const data = Array.isArray(resp.data) ? resp.data : [];
+            data.forEach((item) => {
+                if (!item?.public_id) return;
+                const errors = item.overall?.errors;
+                const errored = Array.isArray(errors) && errors.length > 0;
+                const value = item.overall?.uptime;
+                map.set(item.public_id, !errored && typeof value === 'number' ? value : null);
+            });
+        } catch (error) {
+            this.logger.info('Synthetic uptimes unavailable for a batch', { error });
+        }
+        return map;
     }
 
     /**
@@ -152,9 +275,7 @@ export default class RealDatadogClient implements DatadogClient {
                 );
             }
 
-            data.filter((slo) => slo?.id && RealDatadogClient.hasKeptTag(slo.tags)).forEach((slo) =>
-                kept.push(slo)
-            );
+            data.filter((slo) => slo?.id && hasKeptTag(slo.tags)).forEach((slo) => kept.push(slo));
 
             const totalCount = resp.data?.metadata?.pagination?.total_count;
             const reachedTotal =
@@ -178,17 +299,15 @@ export default class RealDatadogClient implements DatadogClient {
      * @returns {Promise<Map<string, DatadogSloSummary>>} the SLO summary index
      */
     private async buildSloIndex(keptSlos: RawSlo[]): Promise<Map<string, DatadogSloSummary>> {
-        const summaries = await RealDatadogClient.mapWithConcurrency(
-            keptSlos,
-            SLO_HISTORY_CONCURRENCY,
-            (slo) => this.summariseSlo(slo)
+        const summaries = await mapWithConcurrency(keptSlos, SLO_HISTORY_CONCURRENCY, (slo) =>
+            this.summariseSlo(slo)
         );
 
         const index = new Map<string, DatadogSloSummary>();
         keptSlos.forEach((slo, i) => {
             const summary = summaries[i];
             (slo.tags ?? [])
-                .filter((tag) => RealDatadogClient.isKeptTag(tag))
+                .filter((tag) => isKeptTag(tag))
                 .forEach((tag) => {
                     const key = tag.toLowerCase();
                     if (!index.has(key)) index.set(key, summary);
@@ -259,121 +378,52 @@ export default class RealDatadogClient implements DatadogClient {
         url: string,
         params: Record<string, unknown>
     ): Promise<AxiosResponse<T>> {
+        return this.withRateLimitRetry(url, () =>
+            firstValueFrom(this.http.get<T>(url, { params }))
+        );
+    }
+
+    /**
+     * POST wrapper with the same 429 handling as {@link getWithRateLimitRetry}.
+     * @param {string} url - request path
+     * @param {unknown} body - JSON request body
+     * @returns {Promise<AxiosResponse<T>>} the successful response
+     */
+    private async postWithRateLimitRetry<T>(url: string, body: unknown): Promise<AxiosResponse<T>> {
+        return this.withRateLimitRetry(url, () => firstValueFrom(this.http.post<T>(url, body)));
+    }
+
+    /**
+     * Issues one request via `send` and adds explicit 429 (Too Many Requests) handling
+     * on top of the shared ResilientHttpService (whose default retry set does NOT include
+     * 429). On a 429 it waits for the server-advertised window — Retry-After (seconds) or
+     * x-ratelimit-reset (seconds until reset) — falling back to capped exponential
+     * backoff, then retries up to MAX_RATE_LIMIT_RETRIES. Any non-429 error propagates.
+     * @param {string} label - request path, for the backoff log line
+     * @param {() => Promise<AxiosResponse<T>>} send - issues a single attempt
+     * @returns {Promise<AxiosResponse<T>>} the successful response
+     */
+    private async withRateLimitRetry<T>(
+        label: string,
+        send: () => Promise<AxiosResponse<T>>
+    ): Promise<AxiosResponse<T>> {
         for (let attempt = 0; ; attempt += 1) {
             try {
                 // eslint-disable-next-line no-await-in-loop
-                return await firstValueFrom(this.http.get<T>(url, { params }));
+                return await send();
             } catch (error) {
                 const status = isAxiosError(error) ? error.response?.status : undefined;
                 if (status !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES) {
                     throw error;
                 }
-                const waitMs = RealDatadogClient.rateLimitWaitMs(error as AxiosError, attempt);
+                const waitMs = rateLimitWaitMs(error as AxiosError, attempt);
                 this.logger.warn(
-                    `Datadog 429 on [${url}]; backing off ${waitMs}ms ` +
+                    `Datadog 429 on [${label}]; backing off ${waitMs}ms ` +
                         `(retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES})`
                 );
                 // eslint-disable-next-line no-await-in-loop
                 await sleep(waitMs);
             }
         }
-    }
-
-    /**
-     * Computes how long to wait after a 429. Prefers the server's Retry-After header
-     * (delay in seconds), then x-ratelimit-reset (seconds until the limit resets),
-     * else capped exponential backoff. The result is always clamped to
-     * [0, RATE_LIMIT_BACKOFF_MAX_MS] so a malformed header can't stall the run.
-     * @param {AxiosError} error - the 429 error
-     * @param {number} attempt - zero-based retry attempt (drives the exponential fallback)
-     * @returns {number} milliseconds to sleep before retrying
-     */
-    private static rateLimitWaitMs(error: AxiosError, attempt: number): number {
-        const headers = error.response?.headers ?? {};
-        const headerSeconds =
-            RealDatadogClient.numericHeader(headers, 'retry-after') ??
-            RealDatadogClient.numericHeader(headers, 'x-ratelimit-reset');
-        const ms =
-            headerSeconds != null
-                ? headerSeconds * 1000
-                : RATE_LIMIT_BACKOFF_BASE_MS * 2 ** attempt;
-        return Math.min(RATE_LIMIT_BACKOFF_MAX_MS, Math.max(0, ms));
-    }
-
-    /**
-     * Reads a non-negative numeric header value (case-insensitive), or null when the
-     * header is absent or not a finite number.
-     * @param {unknown} headers - the response headers object
-     * @param {string} name - lowercase header name
-     * @returns {number | null} the parsed value, or null
-     */
-    private static numericHeader(headers: unknown, name: string): number | null {
-        if (!headers || typeof headers !== 'object') return null;
-        // Axios lowercases response header keys, but read defensively.
-        const bag = headers as Record<string, unknown>;
-        const raw = bag[name] ?? bag[name.toLowerCase()];
-        const value = Number(Array.isArray(raw) ? raw[0] : raw);
-        return Number.isFinite(value) && value >= 0 ? value : null;
-    }
-
-    /**
-     * Runs `worker` over `items` with at most `limit` promises in flight, preserving
-     * input order in the result array. Used to bound concurrent SLO-history calls.
-     * @param {T[]} items - inputs to process
-     * @param {number} limit - max concurrent workers
-     * @param {(item: T, index: number) => Promise<R>} worker - async mapper
-     * @returns {Promise<R[]>} results in the same order as `items`
-     */
-    private static async mapWithConcurrency<T, R>(
-        items: T[],
-        limit: number,
-        worker: (item: T, index: number) => Promise<R>
-    ): Promise<R[]> {
-        const results = new Array<R>(items.length);
-        let next = 0;
-        const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-            for (;;) {
-                const i = next;
-                next += 1;
-                if (i >= items.length) return;
-                // eslint-disable-next-line no-await-in-loop
-                results[i] = await worker(items[i], i);
-            }
-        });
-        await Promise.all(runners);
-        return results;
-    }
-
-    /**
-     * True when a single tag string is one of the kept SLO tag keys
-     * (app_short_key:<value> / app_service_id:<value>), matched case-insensitively and
-     * requiring a non-empty value after the first colon.
-     * @param {string} tag - a Datadog tag string
-     * @returns {boolean} whether the tag is a kept identifier tag
-     */
-    private static isKeptTag(tag: string): boolean {
-        const [key, value] = RealDatadogClient.splitTag(tag);
-        return value !== '' && KEPT_SLO_TAG_KEYS.includes(key);
-    }
-
-    /**
-     * True when ANY of the SLO's tags is a kept identifier tag.
-     * @param {string[] | undefined} tags - the SLO's tags
-     * @returns {boolean} whether the SLO should be kept
-     */
-    private static hasKeptTag(tags: string[] | undefined): boolean {
-        return Array.isArray(tags) && tags.some((t) => RealDatadogClient.isKeptTag(t));
-    }
-
-    /**
-     * Splits a `key:value` tag into [key, value], lowercased; value defaults to '' for
-     * a valueless tag. Only the first colon splits (values may contain colons).
-     * @param {string} tag - a Datadog tag string
-     * @returns {[string, string]} the lowercased [key, value]
-     */
-    private static splitTag(tag: string): [string, string] {
-        const lower = (tag ?? '').toLowerCase();
-        const idx = lower.indexOf(':');
-        return idx === -1 ? [lower, ''] : [lower.slice(0, idx), lower.slice(idx + 1)];
     }
 }

@@ -1,8 +1,12 @@
 import { HealthSnapshot } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { buildHealthTimeline } from './detail-page.data';
+import { buildActivityFeed, buildHealthEvents, buildHealthTimeline } from './detail-page.data';
 
-const snapshot = (recordedAt: string, status: HealthSnapshot['status']): HealthSnapshot => ({
+const snapshot = (
+    recordedAt: string,
+    status: HealthSnapshot['status'],
+    overrides: Partial<HealthSnapshot> = {}
+): HealthSnapshot => ({
     applicationId: 'app-1',
     status,
     uptimePct: null,
@@ -10,6 +14,7 @@ const snapshot = (recordedAt: string, status: HealthSnapshot['status']): HealthS
     monitorCount: 1,
     resolutionPath: 'primary',
     recordedAt,
+    ...overrides,
 });
 
 describe('buildHealthTimeline', () => {
@@ -51,5 +56,86 @@ describe('buildHealthTimeline', () => {
         expect(axis).toHaveLength(7);
         expect(axis[0]).toBe('May 01');
         expect(axis[axis.length - 1]).toBe('May 30');
+    });
+});
+
+describe('buildHealthEvents', () => {
+    it('returns no events for an empty series', () => {
+        expect(buildHealthEvents([])).toEqual([]);
+    });
+
+    it('emits one event per status change, newest first', () => {
+        const events = buildHealthEvents([
+            snapshot('2026-06-16T09:00:00.000Z', 'GREEN'),
+            snapshot('2026-06-16T10:00:00.000Z', 'AMBER'),
+            snapshot('2026-06-16T12:00:00.000Z', 'RED'),
+        ]);
+
+        expect(events).toHaveLength(2);
+        expect(events[0]).toMatchObject({ fromLabel: 'Amber', toLabel: 'Red' });
+        expect(events[1]).toMatchObject({ fromLabel: 'Green', toLabel: 'Amber' });
+        expect(events[0].source).toBe('Datadog');
+        expect(events[1].duration).toBe('1h');
+    });
+
+    it('produces no rows when the status never changes', () => {
+        const events = buildHealthEvents([
+            snapshot('2026-06-16T09:00:00.000Z', 'GREEN'),
+            snapshot('2026-06-16T10:00:00.000Z', 'GREEN'),
+            snapshot('2026-06-16T11:00:00.000Z', 'GREEN'),
+        ]);
+
+        expect(events).toEqual([]);
+    });
+
+    it('never labels an unknown status Green', () => {
+        const events = buildHealthEvents([
+            snapshot('2026-06-16T09:00:00.000Z', 'GREEN'),
+            snapshot('2026-06-16T10:00:00.000Z', 'UNKNOWN' as unknown as HealthSnapshot['status']),
+        ]);
+
+        expect(events[0].toLabel).toBe('Amber');
+    });
+});
+
+describe('buildActivityFeed', () => {
+    it('returns an empty feed for an empty series', () => {
+        expect(buildActivityFeed([])).toEqual([]);
+    });
+
+    it('includes the latest sync run for a single-snapshot series', () => {
+        const feed = buildActivityFeed([snapshot('2026-06-16T09:00:00.000Z', 'GREEN')]);
+
+        expect(feed).toHaveLength(1);
+        expect(feed[0].color).toBe('grey');
+        expect(feed[0].text).toContain('Health sync completed');
+    });
+
+    it('surfaces health transitions and the latest sync run', () => {
+        const feed = buildActivityFeed([
+            snapshot('2026-06-16T09:00:00.000Z', 'GREEN'),
+            snapshot('2026-06-16T10:00:00.000Z', 'RED'),
+        ]);
+
+        expect(feed.some((item) => item.text.includes('Green → Red') && item.color === 'red')).toBe(
+            true
+        );
+        expect(
+            feed.some(
+                (item) => item.text.includes('Health sync completed') && item.color === 'grey'
+            )
+        ).toBe(true);
+    });
+
+    it('marks an unmapped app as not monitored, never green', () => {
+        const feed = buildActivityFeed([
+            snapshot('2026-06-16T09:00:00.000Z', 'AMBER', {
+                datadogMapped: false,
+                resolutionPath: 'unmapped',
+            }),
+        ]);
+
+        expect(feed[0].text).toContain('not monitored');
+        expect(feed[0].color).not.toBe('green');
     });
 });

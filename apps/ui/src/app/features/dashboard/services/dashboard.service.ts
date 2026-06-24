@@ -9,6 +9,7 @@ import {
     DashboardDetailPeople,
     DashboardDetailResponse,
     HealthHistoryResponse,
+    RecommendationResult,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardDataModeService from './dashboard-data-mode.service';
@@ -18,6 +19,7 @@ import { Application, DashboardSummary, Incident, Contact } from '../models/dash
 import { PORTFOLIO_DATA } from '../models/portfolio.data';
 import { PortfolioAppContext, PortfolioNode } from '../models/portfolio.model';
 import {
+    buildDemoRecommendations,
     createDetailView,
     createFallbackApp,
     findAppContext,
@@ -182,6 +184,27 @@ export default class DashboardService {
 
         return this.http.get<HealthHistoryResponse>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/health-history`
+        );
+    }
+
+    /**
+     * Fetches grounded maturity recommendations for an application (12-x). Loaded
+     * on demand from the detail page, never auto-generated. Demo mode derives the
+     * cards from the seeded app's maturity so the tab stays honest off real data.
+     * @param {string} id - portfolio application id
+     * @param {boolean} refresh - true to bust the server cache ("Regenerate")
+     * @returns {object} grounded, ranked recommendation payload
+     */
+    getRecommendations(id: string, refresh = false): Observable<RecommendationResult> {
+        if (this.dataModeService.currentMode === 'demo') {
+            return of(buildDemoRecommendations(DashboardService.getDemoAppContext(id).app));
+        }
+
+        const params: Record<string, string> = refresh ? { refresh: '1' } : {};
+
+        return this.http.get<RecommendationResult>(
+            `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/recommendations`,
+            { params }
         );
     }
 

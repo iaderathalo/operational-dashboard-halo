@@ -65,6 +65,8 @@ export default class AppComponent {
 
     isDetailRoute = false;
 
+    isReadOnlyRoute = false;
+
     headerDetailLabel = '';
 
     dataMode: DashboardDataMode;
@@ -209,6 +211,7 @@ export default class AppComponent {
 
         this.isDashboardRoute = pathSegments[0] === 'dashboard';
         this.isDetailRoute = false;
+        this.isReadOnlyRoute = pathSegments[1] === 'snapshot';
         this.headerDetailLabel = '';
         this.pendingHeaderDetailId = '';
 

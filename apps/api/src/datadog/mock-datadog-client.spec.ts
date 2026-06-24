@@ -52,4 +52,32 @@ describe('MockDatadogClient.loadSnapshot', () => {
         // OHCM hashes into the ~1-in-5 "no SLO" bucket.
         expect(snapshot.sloSummaryForTag('app_short_key', 'OHCM')).toBeNull();
     });
+
+    it('resolves synthetic checks deterministically and case-insensitively', () => {
+        // Holds whether or not SAP happens to have synthetic checks (empty-safe).
+        expect(snapshot.syntheticsForTag('APP_SHORT_KEY', 'sap')).toEqual(
+            snapshot.syntheticsForTag('app_short_key', 'SAP')
+        );
+        expect(snapshot.syntheticsForTag('app_short_key', 'does-not-exist')).toEqual([]);
+    });
+
+    it('seeds at least one app with synthetic checks, shaped + tagged correctly', () => {
+        // Scan the seeded keys this spec already exercises for one with coverage.
+        const keys = ['SAP', 'SPLK', 'OHCM', 'IFI', 'BCN', 'RLY'];
+        const withChecks = keys
+            .map((k) => snapshot.syntheticsForTag('app_short_key', k))
+            .find((checks) => checks.length > 0);
+        expect(withChecks).toBeDefined();
+        expect(withChecks?.length).toBeLessThanOrEqual(2);
+        expect(withChecks?.[0]).toEqual(
+            expect.objectContaining({
+                publicId: expect.any(String),
+                name: expect.any(String),
+                type: expect.any(String),
+                status: expect.any(String),
+            })
+        );
+        // uptime is present (a number for live, null for paused — never undefined).
+        expect(withChecks?.[0]).toHaveProperty('uptime');
+    });
 });

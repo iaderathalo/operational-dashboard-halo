@@ -1,5 +1,19 @@
-import { DatadogMonitor, DatadogMonitorState } from './datadog.types';
-import { buildHealth, buildMonitorBreakdown, rollupStatus } from './health-rollup';
+import { DatadogMonitor, DatadogMonitorState, DatadogSyntheticCheck } from './datadog.types';
+import {
+    buildHealth,
+    buildMonitorBreakdown,
+    buildSyntheticBreakdown,
+    rollupStatus,
+} from './health-rollup';
+
+const syn = (over: Partial<DatadogSyntheticCheck>): DatadogSyntheticCheck => ({
+    publicId: 'p',
+    name: 'check',
+    type: 'browser',
+    status: 'live',
+    uptime: 100,
+    ...over,
+});
 
 const mon = (state: DatadogMonitorState): DatadogMonitor => ({
     id: 1,
@@ -122,5 +136,34 @@ describe('buildMonitorBreakdown', () => {
             monRich({ name: 'a-ok', overall_state: 'OK' }),
         ]).map((m) => m.name);
         expect(names).toEqual(['a-alert', 'c-warn', 'a-ok', 'b-ok']);
+    });
+});
+
+describe('buildSyntheticBreakdown', () => {
+    it('maps the Datadog shape verbatim', () => {
+        const [c] = buildSyntheticBreakdown([
+            syn({ publicId: 'x1', name: 'login', type: 'api', status: 'paused', uptime: 97.5 }),
+        ]);
+        expect(c).toEqual({
+            publicId: 'x1',
+            name: 'login',
+            type: 'api',
+            status: 'paused',
+            uptime: 97.5,
+        });
+    });
+
+    it('sorts lowest-uptime first, with null (no-data) checks last', () => {
+        const names = buildSyntheticBreakdown([
+            syn({ name: 'ok', uptime: 99.9 }),
+            syn({ name: 'nodata', uptime: null }),
+            syn({ name: 'bad', uptime: 80 }),
+        ]).map((c) => c.name);
+        expect(names).toEqual(['bad', 'ok', 'nodata']);
+    });
+
+    it('caps the breakdown at 50 checks', () => {
+        const many = Array.from({ length: 60 }, (_, i) => syn({ name: `c${i}`, uptime: i }));
+        expect(buildSyntheticBreakdown(many)).toHaveLength(50);
     });
 });

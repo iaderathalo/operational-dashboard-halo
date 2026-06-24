@@ -4,7 +4,9 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
     DashboardDetailResponse,
     DashboardSummary,
+    DigestSummary,
     HealthHistoryResponse,
+    SnapshotMetadata,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
@@ -132,6 +134,45 @@ export default class DashboardService {
             redCount,
             totalActiveUsers,
             overallUptime30d: 99.7,
+        };
+    }
+
+    /**
+     * 11-4: executive weekly digest, derived purely from the stored portfolio (no new
+     * Datadog call). Honors All / My Applications scope.
+     * @param {string} [userEmail] - optional email used to scope to owned apps
+     * @returns {Promise<object>} the derived digest summary
+     */
+    async getDigest(userEmail?: string): Promise<DigestSummary> {
+        this.logger.info('Generating executive digest');
+        return this.portfolioRepository.getDigest(userEmail);
+    }
+
+    /**
+     * 11-4: read-only, forwardable snapshot of the portfolio view as of now, plus a
+     * freshness stamp. Re-derives from the SAME scoped set the caller can already see,
+     * so a `mine`-scoped snapshot never leaks another owner's apps.
+     * @param {string} [userEmail] - optional email used to scope to owned apps
+     * @returns {Promise<object>} the portfolio tree plus snapshot metadata
+     */
+    async getSnapshot(
+        userEmail?: string
+    ): Promise<{ portfolio: PortfolioNode; metadata: SnapshotMetadata }> {
+        this.logger.info('Generating shareable portfolio snapshot');
+
+        const [portfolio, digest] = await Promise.all([
+            this.portfolioRepository.getPortfolio(userEmail),
+            this.portfolioRepository.getDigest(userEmail),
+        ]);
+
+        return {
+            portfolio,
+            metadata: {
+                generatedAt: digest.generatedAt,
+                scope: userEmail ? 'mine' : 'all',
+                freshness: digest.freshness,
+                appCount: digest.rollup.appCount,
+            },
         };
     }
 

@@ -2,6 +2,7 @@ import {
     DatadogMonitor,
     DatadogSloSummary,
     DatadogSnapshot,
+    DatadogSyntheticCheck,
     snapshotTagKey,
 } from './datadog.types';
 
@@ -17,10 +18,12 @@ export default class InMemoryDatadogSnapshot implements DatadogSnapshot {
     /**
      * @param {Map<string, DatadogMonitor[]>} monitorsByTag - lowercased `${tagKey}:${tagValue}` -> monitors carrying that tag
      * @param {Map<string, DatadogSloSummary>} sloByTag - lowercased `${tagKey}:${tagValue}` -> the SLO summary tagged with it
+     * @param {Map<string, DatadogSyntheticCheck[]>} syntheticsByTag - lowercased `${tagKey}:${tagValue}` -> synthetic checks tagged with it
      */
     constructor(
         private readonly monitorsByTag: Map<string, DatadogMonitor[]>,
-        private readonly sloByTag: Map<string, DatadogSloSummary>
+        private readonly sloByTag: Map<string, DatadogSloSummary>,
+        private readonly syntheticsByTag: Map<string, DatadogSyntheticCheck[]> = new Map()
     ) {}
 
     /**
@@ -41,6 +44,18 @@ export default class InMemoryDatadogSnapshot implements DatadogSnapshot {
      */
     sloSummaryForTag(tagKey: string, tagValue: string): DatadogSloSummary | null {
         return this.sloByTag.get(snapshotTagKey(tagKey, tagValue)) ?? null;
+    }
+
+    /**
+     * Synthetic checks carrying the given tag. Returns a defensive copy so a caller
+     * cannot mutate the shared index bucket.
+     * @param {string} tagKey - tag key to match (e.g. `app_short_key`)
+     * @param {string} tagValue - tag value to match (e.g. the app's CAST key)
+     * @returns {DatadogSyntheticCheck[]} the matching checks (possibly empty)
+     */
+    syntheticsForTag(tagKey: string, tagValue: string): DatadogSyntheticCheck[] {
+        const hit = this.syntheticsByTag.get(snapshotTagKey(tagKey, tagValue));
+        return hit ? [...hit] : [];
     }
 
     /**

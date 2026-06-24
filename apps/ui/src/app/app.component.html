@@ -54,9 +54,13 @@
                             class="header-data-mode-button"
                             [class.active]="scope === 'all'"
                             [attr.aria-pressed]="scope === 'all'"
-                            [disabled]="isDetailRoute"
+                            [disabled]="isDetailRoute || isReadOnlyRoute"
                             [attr.title]="
-                                isDetailRoute ? 'Scope applies to the portfolio list' : null
+                                isReadOnlyRoute
+                                    ? 'Disabled in read-only snapshot'
+                                    : isDetailRoute
+                                      ? 'Scope applies to the portfolio list'
+                                      : null
                             "
                             (click)="setScope('all')"
                         >
@@ -67,9 +71,13 @@
                             class="header-data-mode-button"
                             [class.active]="scope === 'mine'"
                             [attr.aria-pressed]="scope === 'mine'"
-                            [disabled]="isDetailRoute"
+                            [disabled]="isDetailRoute || isReadOnlyRoute"
                             [attr.title]="
-                                isDetailRoute ? 'Scope applies to the portfolio list' : null
+                                isReadOnlyRoute
+                                    ? 'Disabled in read-only snapshot'
+                                    : isDetailRoute
+                                      ? 'Scope applies to the portfolio list'
+                                      : null
                             "
                             (click)="setScope('mine')"
                         >

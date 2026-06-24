@@ -104,6 +104,10 @@ export interface DashboardDetailHealthCheck {
     name: string;
     ok: boolean;
     time: string;
+    /** 12-4: 30-day synthetic uptime %, or null when the window has no data. */
+    uptime?: number | null;
+    /** 12-4: synthetic lifecycle — `live` | `paused`. */
+    status?: string;
 }
 
 export interface DashboardDetailMonitor {

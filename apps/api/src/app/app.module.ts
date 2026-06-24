@@ -11,6 +11,8 @@ import DashboardModule from '../dashboard/dashboard.module';
 import DatadogModule from '../datadog/datadog.module';
 import HealthModule from '../health/health.module';
 import IncidentsModule from '../incidents/incidents.module';
+import PlanviewModule from '../planview/planview.module';
+import RecommendationsModule from '../recommendations/recommendations.module';
 import TasksModule from '../tasks/tasks.module';
 import TeamsModule from '../teams/teams.module';
 import OktaGuard from './common/auth-guards/oktaGuard.service';
@@ -33,6 +35,17 @@ export const configSchema = Joi.object({
     DATADOG_APP_KEY: Joi.string(),
     INTERNAL_SYNC_TOKEN: Joi.string(),
     PORTFOLIO_OPCO_ALLOWLIST: Joi.string(),
+    // 10-2 — Dremio live PlanView source.
+    DREMIO_BASE_URL: Joi.string(),
+    DREMIO_PAT: Joi.string(),
+    DREMIO_VIEW_PATH: Joi.string(),
+    USE_REAL_PLANVIEW: Joi.string().default('false'),
+    // 11-4 — executive digest. Recipients + cadence from config/Vault, never hardcoded.
+    DIGEST_RECIPIENTS: Joi.string(),
+    DIGEST_SCHEDULE: Joi.string().default('0 13 * * MON'),
+    DIGEST_DELIVERY_MODE: Joi.string().valid('api', 'email').default('api'),
+    // 12-x — recommendations LLM provider. Unset ⇒ grounded deterministic mock.
+    RECOMMENDATIONS_LLM_PROVIDER: Joi.string(),
 });
 
 @Module({
@@ -49,6 +62,8 @@ export const configSchema = Joi.object({
         TeamsModule,
         HealthModule,
         DatadogModule,
+        PlanviewModule,
+        RecommendationsModule,
     ],
     controllers: [AppController],
     providers: [

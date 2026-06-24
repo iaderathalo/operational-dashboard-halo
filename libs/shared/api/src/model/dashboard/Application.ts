@@ -14,6 +14,21 @@ export interface ApplicationMonitor {
     inMaintenance: boolean;
 }
 
+/**
+ * One Datadog Synthetic test resolved for an Application (12-4 Health Check Breakdown).
+ * Persisted on the app doc by the Crawler, like {@link ApplicationMonitor}.
+ */
+export interface ApplicationSyntheticCheck {
+    publicId: string;
+    name: string;
+    /** Test kind: `api` | `browser` | `mobile`. */
+    type: string;
+    /** Lifecycle: `live` | `paused`. */
+    status: string;
+    /** 30-day synthetic uptime %, or null when the window has no data (paused / errored). */
+    uptime: number | null;
+}
+
 export interface StatusOverride {
     status: ApplicationStatus;
     overriddenBy: string;
@@ -53,4 +68,5 @@ export default interface Application {
     lastSyncStatus?: 'ok' | 'error' | 'unmapped' | null;
     resolutionPath?: 'primary' | 'fallback' | 'unmapped' | null;
     monitors?: ApplicationMonitor[];
+    syntheticChecks?: ApplicationSyntheticCheck[];
 }

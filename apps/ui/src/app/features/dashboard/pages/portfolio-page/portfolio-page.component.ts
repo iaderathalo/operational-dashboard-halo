@@ -1,9 +1,17 @@
+/* eslint-disable max-lines */
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
+import { combineLatest, Subscription } from 'rxjs';
 
-import { PortfolioNode, PortfolioApp, StatusCounts } from '../../models/portfolio.model';
+import { METRIC_DESCRIPTIONS, formatMetricTooltip } from '../../metric-descriptions';
+import {
+    PortfolioNode,
+    PortfolioApp,
+    PortfolioRollup,
+    StatusCounts,
+} from '../../models/portfolio.model';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
+import DashboardNavStateService from '../../services/dashboard-nav-state.service';
 import DashboardScopeService from '../../services/dashboard-scope.service';
 import DashboardService from '../../services/dashboard.service';
 
@@ -38,32 +46,77 @@ function syncSuffix(lastSyncAt?: string | null): string {
 }
 
 /**
- *
- * @param app
+ * Builds the provenance tooltip for the Health column, including the metric description triad.
+ * @param {PortfolioApp} app - portfolio application
+ * @returns {string} human-readable provenance for a native tooltip
  */
 function buildHealthProvenance(app: PortfolioApp): string {
+    const staticDesc = formatMetricTooltip(METRIC_DESCRIPTIONS.health);
     if (app.lastSyncStatus === 'error') {
-        return 'Stale — last Datadog sync failed';
+        return `${staticDesc}\nStale — last Datadog sync failed`;
     }
 
     if (app.datadogMapped === false || app.resolutionPath === 'unmapped') {
-        return 'Not mapped in Datadog — health unavailable';
+        return `${staticDesc}\nNot mapped in Datadog — health unavailable`;
     }
 
     const via = app.resolutionPath === 'fallback' ? ' (fallback)' : '';
-    return `Live · Datadog${via}${syncSuffix(app.lastSyncAt)}`;
+    return `${staticDesc}\nLive · Datadog${via}${syncSuffix(app.lastSyncAt)}`;
 }
 
 /**
- *
- * @param app
+ * Builds the provenance tooltip for the Uptime column, including the metric description triad.
+ * @param {PortfolioApp} app - portfolio application
+ * @returns {string} human-readable provenance for a native tooltip
  */
 function buildUptimeProvenance(app: PortfolioApp): string {
+    const staticDesc = formatMetricTooltip(METRIC_DESCRIPTIONS.uptime);
     if (app.uptime === null) {
-        return 'No SLO in Datadog — uptime unavailable';
+        return `${staticDesc}\nNo SLO in Datadog — uptime unavailable`;
     }
 
-    return `Live · Datadog SLO${syncSuffix(app.lastSyncAt)}`;
+    return `${staticDesc}\nLive · Datadog SLO${syncSuffix(app.lastSyncAt)}`;
+}
+
+const MATURITY_SIGNAL_KEY_ORDER: ReadonlyArray<
+    keyof NonNullable<PortfolioApp['maturity']>['signals']
+> = ['mapped', 'hasMonitor', 'hasSLO', 'sloPassing', 'hasOwner'];
+
+const MATURITY_SIGNAL_CALC: Record<string, string> = {
+    mapped: 'Linked to a Datadog service (the app carries a service tag).',
+    hasMonitor: 'At least one Datadog monitor watches that service.',
+    hasSLO: 'A 30-day SLO target is defined for the service.',
+    sloPassing: 'The 30-day uptime is meeting that SLO target.',
+    hasOwner: 'An IT, portfolio, or business owner is recorded.',
+};
+
+const HEALTH_RISK_WEIGHTS: Record<string, number> = { red: 3, amber: 2, undefined: 1 };
+
+const BURN_RISK_WEIGHTS: Record<string, number> = { 'at-risk': 2, 'fast-burn': 1 };
+
+/**
+ * Documented per-app risk weight: health severity ×2 plus burn-band severity.
+ * @param {PortfolioApp} a - portfolio app
+ * @returns {number} risk weight
+ */
+function appRisk(a: PortfolioApp): number {
+    const health = HEALTH_RISK_WEIGHTS[a.health] ?? 0;
+    const burn = BURN_RISK_WEIGHTS[a.burnRate?.band ?? ''] ?? 0;
+    return health * 2 + burn;
+}
+
+/**
+ * Overall maturity tooltip shown on the "X/5" score label: the score, the scoring rule,
+ * and the data source. Per-signal detail lives on each indicator block.
+ * @param {PortfolioApp} app - portfolio app
+ * @returns {string} two-line score summary
+ */
+function buildMaturityScoreTooltip(app: PortfolioApp): string {
+    const { maturity } = app;
+    const header = maturity
+        ? `Maturity ${maturity.score}/${maturity.max} · 1 point per signal met`
+        : 'Maturity · not scored yet';
+    return `${header}\nSource: Datadog + PlanView`;
 }
 
 const EMPTY_PORTFOLIO_NODE: PortfolioNode = {
@@ -86,6 +139,10 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
     currentNode: PortfolioNode = EMPTY_PORTFOLIO_NODE;
 
+    topRiskNodesCache: PortfolioNode[] = [];
+
+    topRiskAppsCache: PortfolioApp[] = [];
+
     expandedTreeNodes = new Set<string>();
 
     expandedSections = new Set<string>();
@@ -102,9 +159,9 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
     loadError = '';
 
-    private modeSubscription?: Subscription;
+    readOnly = false;
 
-    private scopeSubscription?: Subscription;
+    private loadSubscription?: Subscription;
 
     private readonly statusOrder: Array<PortfolioApp['health']> = [
         'green',
@@ -137,6 +194,13 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         hasOwner: 'Has owner',
     };
 
+    private readonly burnRateBandLabels: Record<string, string> = {
+        healthy: 'Healthy — under 1.0x (within SLO budget)',
+        'fast-burn': 'Fast burn — 1.0x to 2.0x (consuming budget faster than allowed)',
+        'at-risk': 'At risk — over 2.0x (trending to breach)',
+        unknown: 'No SLO data',
+    };
+
     /**
      * Columns that are still placeholder (not yet wired to a live source) and are
      * rendered greyed out. Flip a flag to `false` as each column goes live so the
@@ -152,32 +216,41 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     /**
      * Creates the portfolio page controller.
      * @param {object} router - router used for dashboard detail navigation
+     * @param {object} route - activated route for reading snapshot/readOnly data
      * @param {object} dashboardService - service used to load dashboard data from the API
-     * @param dataModeService
-     * @param scopeService
+     * @param {object} dataModeService - service tracking demo vs live mode
+     * @param {object} scopeService - service tracking the active portfolio scope
+     * @param {object} navStateService - service preserving node/scroll state across navigation
      */
     constructor(
         private router: Router,
+        private route: ActivatedRoute,
         private dashboardService: DashboardService,
         private dataModeService: DashboardDataModeService,
-        private scopeService: DashboardScopeService
+        private scopeService: DashboardScopeService,
+        private navStateService: DashboardNavStateService
     ) {}
 
     /**
      * Initializes the default dashboard view.
      */
     ngOnInit(): void {
+        this.readOnly = this.route.snapshot.data.readOnly === true;
         this.updateViewportState();
-        this.modeSubscription = this.dataModeService.mode$.subscribe(() => this.loadPortfolio());
-        this.scopeSubscription = this.scopeService.scope$.subscribe(() => this.loadPortfolio());
+        // mode$ and scope$ are BehaviorSubjects (emit immediately) — subscribing to each
+        // separately fired loadPortfolio() TWICE on init, and the 2nd run cleared+clobbered
+        // the restored nav state. combineLatest collapses them into a single load (13-10 fix).
+        this.loadSubscription = combineLatest([
+            this.dataModeService.mode$,
+            this.scopeService.scope$,
+        ]).subscribe(() => this.loadPortfolio());
     }
 
     /**
      * Releases the mode subscription when the page is destroyed.
      */
     ngOnDestroy(): void {
-        this.modeSubscription?.unsubscribe();
-        this.scopeSubscription?.unsubscribe();
+        this.loadSubscription?.unsubscribe();
     }
 
     /**
@@ -311,6 +384,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
         this.currentNode = node;
         this.breadcrumbPath = this.getPath(id) || [];
+        this.recomputeTopRisks();
         this.initializeExpandedSections(node);
 
         if (this.isMobileViewport) {
@@ -373,11 +447,24 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Opens the application detail route for the selected app.
-     * @param {object} app - application to open
+     * Opens the application detail route for the selected app, saving the current node and scroll
+     * position so the portfolio page can restore its state when the user navigates back.
+     * @param {PortfolioApp} app - application to open
+     * @returns {void}
      */
     openAppDetail(app: PortfolioApp): void {
-        this.router.navigate(['/dashboard/app', app.id]);
+        const scrollEl = document.querySelector('.table-scroll');
+        const scrollTop = scrollEl instanceof HTMLElement ? scrollEl.scrollTop : 0;
+        // Save copies of the Sets so restored state exactly matches what the user saw.
+        this.navStateService.saveNodeContext(
+            this.currentNode.id,
+            scrollTop,
+            new Set(this.expandedTreeNodes),
+            new Set(this.expandedSections)
+        );
+        this.router.navigate(['/dashboard/app', app.id], {
+            queryParams: { from: this.currentNode.id },
+        });
     }
 
     /**
@@ -398,18 +485,174 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         return this.perceptionLabels[status];
     }
 
+    /** Overall maturity tooltip for the "X/5" score label (delegates to a pure builder). */
+    readonly maturityScoreTooltip = buildMaturityScoreTooltip;
+
     /**
-     * Builds a per-signal breakdown tooltip for the maturity score.
+     * Returns 5 segment descriptors for the maturity indicator. Each segment maps to
+     * a specific signal in `MATURITY_SIGNAL_KEY_ORDER` so position = criterion, not
+     * rank. The `cls` drives the fill; `tip` is that block's own `.prov-cell` tooltip
+     * — its state (✓/✗) + label on the first line and how it's calculated on the next.
      * @param {PortfolioApp} app - portfolio app
-     * @returns {string} breakdown like "✓ Mapped to Datadog · ✗ Has SLO ..."
+     * @returns {{ cls: string; tip: string }[]} 5 segment descriptors
      */
-    maturityTooltip(app: PortfolioApp): string {
-        if (!app.maturity) {
-            return 'No maturity data';
+    maturitySegments(app: PortfolioApp): { cls: string; tip: string }[] {
+        const { maturity } = app;
+        return MATURITY_SIGNAL_KEY_ORDER.map((key) => {
+            const met = maturity ? maturity.signals[key] : false;
+            const label = this.maturitySignalLabels[key] ?? key;
+            const calc = MATURITY_SIGNAL_CALC[key] ?? '';
+            return {
+                cls: met ? 'mat-filled' : 'mat-empty',
+                tip: `${met ? '✓' : '✗'} ${label}\n${calc}`,
+            };
+        });
+    }
+
+    // 11-2 burn-rate (error-budget burn) ----------------------------------------
+
+    /**
+     * Formats a per-app burn rate as "x.xx" or "—" when SLO inputs are missing.
+     * @param {PortfolioApp} app - portfolio app
+     * @returns {string} formatted burn rate
+     */
+    // eslint-disable-next-line class-methods-use-this
+    burnRateLabel(app: PortfolioApp): string {
+        const rate = app.burnRate?.rate;
+        return rate != null ? `${rate.toFixed(2)}x` : '—';
+    }
+
+    /**
+     * Maps a burn-rate band to a metric color class (never a false GREEN for unknown).
+     * @param {PortfolioApp} app - portfolio app
+     * @returns {string} css class for the burn-rate cell
+     */
+    // eslint-disable-next-line class-methods-use-this
+    burnRateClass(app: PortfolioApp): string {
+        switch (app.burnRate?.band) {
+            case 'at-risk':
+                return 'metric-bad';
+            case 'fast-burn':
+                return 'metric-warn';
+            case 'healthy':
+                return 'metric-good';
+            default:
+                return 'metric-muted';
         }
-        return Object.entries(app.maturity.signals)
-            .map(([key, met]) => `${met ? '✓' : '✗'} ${this.maturitySignalLabels[key] ?? key}`)
-            .join(' · ');
+    }
+
+    /**
+     * Tooltip describing the burn-rate band for the cell, prefixed with the metric triad.
+     * @param {PortfolioApp} app - portfolio app
+     * @returns {string} multi-line provenance tooltip with metric triad and band description
+     */
+    burnRateTooltip(app: PortfolioApp): string {
+        const staticDesc = formatMetricTooltip(METRIC_DESCRIPTIONS.burnRate);
+        const bandDesc = this.burnRateBandLabels[app.burnRate?.band ?? 'unknown'] ?? 'No SLO data';
+        return `${staticDesc}\n${bandDesc}`;
+    }
+
+    // 11-1 risk roll-up + top-risks --------------------------------------------
+
+    /**
+     * Roll-up for a node — prefers the API-provided rollup, falls back to a local
+     * derivation so the badges render even if an older payload lacks it. The local
+     * fallback never marks an unmonitored app GREEN.
+     * @param {PortfolioNode} node - portfolio node
+     * @returns {PortfolioRollup} aggregate roll-up
+     */
+    nodeRollup(node: PortfolioNode): PortfolioRollup {
+        if (node.rollup) {
+            return node.rollup;
+        }
+        const apps = this.getAllApps(node);
+        const n = apps.length;
+        if (!n) {
+            return {
+                appCount: 0,
+                healthyPct: null,
+                coveragePct: null,
+                sloPassingPct: null,
+                avgMaturity: null,
+                fastBurnCount: 0,
+            };
+        }
+        const pct = (s: number) => Math.round((s / n) * 1000) / 10;
+        return {
+            appCount: n,
+            healthyPct: pct(apps.filter((a) => a.datadogMapped && a.health === 'green').length),
+            coveragePct: pct(apps.filter((a) => a.datadogMapped).length),
+            sloPassingPct: null,
+            avgMaturity: null,
+            fastBurnCount: apps.filter(
+                (a) => a.burnRate?.band === 'fast-burn' || a.burnRate?.band === 'at-risk'
+            ).length,
+        };
+    }
+
+    /**
+     * Formats a roll-up percentage, or "—" when it is null (missing data, 5-6).
+     * @param {number | null} value - percentage value
+     * @returns {string} formatted percentage
+     */
+    // eslint-disable-next-line class-methods-use-this
+    rollupPct(value: number | null): string {
+        return value != null ? `${value}%` : '—';
+    }
+
+    /**
+     * Transparent node risk ordering (11-1): rank by a documented score —
+     * (200 − coveragePct − healthyPct), weighted toward larger nodes by log10(appCount+1).
+     * Lower coverage and lower health raise the score; bigger nodes break ties upward.
+     * @param {PortfolioRollup} r - node roll-up
+     * @returns {number} risk score (higher = riskier)
+     */
+    // eslint-disable-next-line class-methods-use-this
+    private riskScore(r: PortfolioRollup): number {
+        const cov = r.coveragePct ?? 0;
+        const healthy = r.healthyPct ?? 0;
+        return (200 - cov - healthy) * Math.log10(r.appCount + 1);
+    }
+
+    /**
+     *
+     */
+    private recomputeTopRisks(): void {
+        this.topRiskNodesCache = this.computeTopRiskNodes();
+        this.topRiskAppsCache = this.computeTopRiskApps();
+    }
+
+    /**
+     * Up to five highest-risk descendant nodes of the current node, ordered by riskScore.
+     * @returns {PortfolioNode[]} top risk nodes
+     */
+    private computeTopRiskNodes(): PortfolioNode[] {
+        const acc: PortfolioNode[] = [];
+        const walk = (node: PortfolioNode) => {
+            (node.children || []).forEach((c) => {
+                acc.push(c);
+                walk(c);
+            });
+        };
+        walk(this.currentNode);
+        return acc
+            .filter((nd) => this.nodeRollup(nd).appCount > 0)
+            .sort((a, b) => this.riskScore(this.nodeRollup(b)) - this.riskScore(this.nodeRollup(a)))
+            .slice(0, 5);
+    }
+
+    /**
+     * Up to five worst apps under the current node: RED/AMBER health or an at-risk
+     * burn rate, ordered by a documented health×2 + burn-band weighting.
+     * @returns {PortfolioApp[]} worst apps
+     */
+    private computeTopRiskApps(): PortfolioApp[] {
+        return this.getAllApps(this.currentNode)
+            .filter(
+                (a) => a.health === 'red' || a.health === 'amber' || a.burnRate?.band === 'at-risk'
+            )
+            .sort((a, b) => appRisk(b) - appRisk(a))
+            .slice(0, 5);
     }
 
     /**
@@ -437,7 +680,10 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Loads the portfolio tree from the backend.
+     * Loads the portfolio tree from the backend, then restores any previously saved
+     * node and scroll position from DashboardNavStateService (e.g. after navigating
+     * back from the detail page).
+     * @returns {void}
      */
     private loadPortfolio(): void {
         this.isLoading = true;
@@ -449,7 +695,35 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
                 this.currentNode = portfolio;
                 this.expandedTreeNodes = new Set<string>();
                 this.initializeExpandedTreeNodes(portfolio);
-                this.navigateToNode(portfolio.id);
+
+                const returnNodeId = this.navStateService.getLastNodeId();
+                const returnScrollTop = this.navStateService.getLastScrollTop();
+                const returnExpandedTree = this.navStateService.getLastExpandedTreeNodes();
+                const returnExpandedSections = this.navStateService.getLastExpandedSections();
+                this.navStateService.clearNodeContext();
+
+                if (returnNodeId && this.findNode(returnNodeId)) {
+                    // Restore tree/section expansion BEFORE navigateToNode so the sidebar
+                    // renders fully expanded when the view settles.
+                    if (returnExpandedTree.size > 0) {
+                        this.expandedTreeNodes = returnExpandedTree;
+                    }
+                    if (returnExpandedSections.size > 0) {
+                        this.expandedSections = returnExpandedSections;
+                    }
+                    this.navigateToNode(returnNodeId);
+                    if (returnScrollTop > 0) {
+                        setTimeout(() => {
+                            const scrollEl = document.querySelector('.table-scroll');
+                            if (scrollEl instanceof HTMLElement) {
+                                scrollEl.scrollTop = returnScrollTop;
+                            }
+                        }, 0);
+                    }
+                } else {
+                    this.navigateToNode(portfolio.id);
+                }
+
                 this.isLoading = false;
             },
             error: () => {

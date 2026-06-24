@@ -7,39 +7,38 @@ import { Subscription } from 'rxjs';
 import {
     DashboardDetailChannelOption,
     DashboardDetailPeople,
-    DashboardDetailSource,
-    DashboardDetailStatus,
     DashboardDetailView,
     DashboardDetailNotifyOption,
     HealthSnapshot,
+    RecommendationResult,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import {
+    buildActivityFeed,
+    buildHealthEvents,
     buildHealthTimeline,
+    buildSourceTip,
     cloneCheckedItems,
     DETAIL_TABS,
     DetailTabId,
     HEALTH_STATUS_LABELS,
     ISSUE_TYPES,
     IssueType,
+    PERCEPTION_PLACEHOLDER,
     PERCEPTION_STATUS_LABELS,
+    perceptionGaugeOffsetFor,
+    REC_CONFIDENCE_TONE,
+    REC_EFFORT_LABEL,
+    REC_SIGNAL_CATEGORY,
+    recRingTone,
+    shortenSyntheticCheckName,
+    statusLabel,
+    syntheticCheckTone,
+    windowHealthByRange,
 } from './detail-page.data';
+import { METRIC_DESCRIPTIONS, formatMetricTooltip } from '../../metric-descriptions';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 import DashboardService from '../../services/dashboard.service';
-
-/**
- *
- * @param source
- */
-function buildSourceTip(source?: DashboardDetailSource): string {
-    if (source === 'datadog') {
-        return 'Live · Datadog';
-    }
-    if (source === 'planview') {
-        return 'Real · from PlanView (not Datadog)';
-    }
-    return 'Placeholder — not wired to a live source yet';
-}
 
 @Component({
     selector: 'polaris-detail-page',
@@ -62,7 +61,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     people!: DashboardDetailPeople;
 
-    readonly tabs = DETAIL_TABS;
+    readonly tabs = DETAIL_TABS.filter((tab) => tab.id !== 'perception' || !PERCEPTION_PLACEHOLDER);
 
     readonly issueTypes = ISSUE_TYPES;
 
@@ -79,6 +78,9 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     healthTimelineLive = false;
 
     healthTimelineEmpty = false;
+
+    /** Recent Health Events + Recent Activity derive from the real synced series, not seeded (E12-S1). */
+    syncedCardsReal = false;
 
     /** Full Health series from the backend; re-windowed by the active overview range (7-1). */
     private healthSeries: HealthSnapshot[] = [];
@@ -98,6 +100,17 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     sev1ChannelOptions: DashboardDetailChannelOption[] = [];
 
     expandedIncidents = new Set<string>();
+
+    /** 12-x Recommendations: loaded on demand (Generate), never in ngOnInit. */
+    recs?: RecommendationResult;
+
+    recsLoading = false;
+
+    recsError = '';
+
+    recsGenerated = false;
+
+    expandedRecs = new Set<string>();
 
     toastVisible = false;
 
@@ -125,6 +138,8 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     /**
      * Loads the routed application context and seeds the prototype-derived view model.
+     * Also restores the active tab from the ?tab= query param when navigating via deep-link.
+     * @returns {void}
      */
     ngOnInit(): void {
         const id = this.route.snapshot.paramMap.get('id') || '';
@@ -133,6 +148,11 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
             this.loadError = 'Application detail is unavailable.';
             this.isLoading = false;
             return;
+        }
+
+        const tabParam = this.route.snapshot.queryParamMap.get('tab') as DetailTabId | null;
+        if (tabParam && this.tabs.some((t) => t.id === tabParam)) {
+            this.activeTab = tabParam;
         }
 
         this.currentAppId = id;
@@ -153,11 +173,19 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Switches the visible detail tab.
-     * @param {string} tabId Tab identifier to activate.
+     * Switches the visible detail tab and writes the active tab id to the URL as a query param
+     * so the current tab survives a page refresh or can be deep-linked.
+     * @param {DetailTabId} tabId Tab identifier to activate.
+     * @returns {void}
      */
     setTab(tabId: DetailTabId): void {
         this.activeTab = tabId;
+        this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: { tab: tabId },
+            queryParamsHandling: 'merge',
+            replaceUrl: true,
+        });
     }
 
     /**
@@ -184,26 +212,37 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         this.router.navigate(['/dashboard']);
     }
 
-    /**
-     * Maps a health or perception status code to the display label used in the UI.
-     * @param {string} status Status code to convert.
-     * @param {string} type Status family to look up.
-     * @returns {string} Human-readable label for the supplied status.
-     */
-    statusLabel(status: DashboardDetailStatus, type: 'health' | 'perception' = 'health'): string {
-        if (type === 'perception') {
-            return this.perceptionStatusLabels[status];
-        }
+    /** Maps a health/perception status code to its UI label (pure helper from data.ts). */
+    readonly statusLabel = statusLabel;
 
-        return this.healthStatusLabels[status];
+    /** Provenance tooltip for the live-vs-placeholder dot on detail cards. */
+    readonly sourceTip = buildSourceTip;
+
+    /** 12-x Recommendations: template-bound lookups exposed as field refs (no this). */
+    readonly recCategory = REC_SIGNAL_CATEGORY;
+
+    readonly recEffortLabel = REC_EFFORT_LABEL;
+
+    readonly recConfidenceTone = REC_CONFIDENCE_TONE;
+
+    readonly recRingTone = recRingTone;
+
+    /** Provenance tooltip for the Recommendations scorecard (machine-suggested → grey dot). */
+    readonly recSourceTip = formatMetricTooltip(METRIC_DESCRIPTIONS.recommendations);
+
+    /** Health Check Breakdown (12-4): readable label + uptime tone for a synthetic check. */
+    readonly healthCheckLabel = shortenSyntheticCheckName;
+
+    readonly healthCheckTone = syntheticCheckTone;
+
+    /**
+     * Whether the Health Check Breakdown is live synthetic data (real mode) vs the demo
+     * sample — drives the source dot colour + tooltip.
+     * @returns {boolean} true in real-data mode
+     */
+    get healthChecksLive(): boolean {
+        return this.dataModeService.currentMode === 'real';
     }
-
-    /**
-     * Provenance tooltip for the live-vs-placeholder dot on detail cards.
-     * @param {string} [source] Where the card's data comes from.
-     * @returns {string} Human-readable provenance for a native tooltip.
-     */
-    sourceTip = buildSourceTip;
 
     /**
      * Opens the Sev-1 workflow modal and resets it to the first step.
@@ -269,6 +308,85 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Maturity score for the scorecard header before recommendations are generated.
+     * The detail view does not surface maturity, so it falls back to the loaded
+     * recommendations' currentScore (0 until first generation).
+     * @returns {number} Current maturity score (0–5).
+     */
+    get maturityScore(): number {
+        return this.recs?.currentScore ?? 0;
+    }
+
+    /** Number of failing maturity signals = the count of generated actions. */
+    get failingCount(): number {
+        return this.recs?.actions.length ?? 0;
+    }
+
+    /**
+     * Loads grounded recommendations on demand (the Generate button). Never called
+     * from ngOnInit/loadDetail — the tab stays empty until the user asks for it.
+     * @returns {void}
+     */
+    generateRecommendations(): void {
+        this.fetchRecommendations(false);
+    }
+
+    /**
+     * Re-runs generation, busting the server cache. Prior results stay visible on
+     * error so a transient failure never wipes a good answer.
+     * @returns {void}
+     */
+    regenerate(): void {
+        this.fetchRecommendations(true);
+    }
+
+    /**
+     * Shared fetch for generate/regenerate. Preserves any prior `recs` on error.
+     * @param {boolean} refresh True to bust the server cache.
+     * @returns {void}
+     */
+    private fetchRecommendations(refresh: boolean): void {
+        this.recsLoading = true;
+        this.recsError = '';
+
+        this.dashboardService.getRecommendations(this.currentAppId, refresh).subscribe({
+            next: (result) => {
+                this.recs = result;
+                this.recsGenerated = true;
+                this.recsError = '';
+                this.recsLoading = false;
+            },
+            error: () => {
+                this.recsError = 'Unable to generate recommendations. Try again.';
+                this.recsLoading = false;
+            },
+        });
+    }
+
+    /**
+     * Expands or collapses a recommendation card's details.
+     * @param {string} id Recommendation id that keys the expanded state.
+     * @returns {void}
+     */
+    toggleRec(id: string): void {
+        if (this.expandedRecs.has(id)) {
+            this.expandedRecs.delete(id);
+            return;
+        }
+
+        this.expandedRecs.add(id);
+    }
+
+    /**
+     * Returns whether a given recommendation card is currently expanded.
+     * @param {string} id Recommendation id that keys the expanded state.
+     * @returns {boolean} True when the card is expanded.
+     */
+    isRecExpanded(id: string): boolean {
+        return this.expandedRecs.has(id);
+    }
+
+    /**
      * Completes the Sev-1 workflow and shows a confirmation toast.
      */
     confirmSev1(): void {
@@ -327,6 +445,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     private loadHealthTimeline(id: string): void {
         this.healthTimelineLive = false;
         this.healthTimelineEmpty = false;
+        this.syncedCardsReal = false;
 
         if (this.dataModeService.currentMode === 'demo') {
             return;
@@ -346,6 +465,10 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
      */
     private applyHealthTimeline(points: HealthSnapshot[]): void {
         this.healthSeries = points;
+        // E12-S1: the same already-synced series feeds the two synced-data cards.
+        this.syncedCardsReal = true;
+        this.view.healthEvents = buildHealthEvents(points);
+        this.view.activityLog = buildActivityFeed(points);
         this.renderHealthTimeline();
     }
 
@@ -363,10 +486,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
             return;
         }
 
-        const windowed = DetailPageComponent.windowByRange(
-            this.healthSeries,
-            this.activeOverviewRange
-        );
+        const windowed = windowHealthByRange(this.healthSeries, this.activeOverviewRange);
 
         if (!windowed.length) {
             // Snapshots exist, but none within the selected window — honest empty for this range.
@@ -382,26 +502,6 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         this.view.timelineAxis = axis;
         this.healthTimelineLive = true;
         this.healthTimelineEmpty = false;
-    }
-
-    /**
-     * Filters a Health series to the records within the given range (24h/7d/30d).
-     * An unknown range returns the full series.
-     * @param {HealthSnapshot[]} points Health records.
-     * @param {string} range Active range label.
-     * @returns {HealthSnapshot[]} Records recorded within the range.
-     */
-    private static windowByRange(points: HealthSnapshot[], range: string): HealthSnapshot[] {
-        const windowDays: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30 };
-        const span = windowDays[range];
-        if (!span) {
-            return points;
-        }
-        const cutoff = Date.now() - span * 24 * 60 * 60 * 1000;
-        return points.filter((point) => {
-            const recordedAt = Date.parse(point.recordedAt);
-            return Number.isNaN(recordedAt) ? true : recordedAt >= cutoff;
-        });
     }
 
     /**
@@ -428,11 +528,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         return this.sev1ChannelOptions.filter((option) => option.checked).length;
     }
 
-    /**
-     * Computes the SVG stroke offset for the perception gauge.
-     * @returns {number} Stroke dash offset for the current perception score.
-     */
-    perceptionGaugeOffset(): number {
-        return Number((235.6 * (1 - this.view.perceptionScore / 100)).toFixed(1));
-    }
+    /** SVG stroke-dash offset for the perception gauge (math in data.ts). */
+    readonly perceptionGaugeOffset = (): number =>
+        perceptionGaugeOffsetFor(this.view.perceptionScore);
 }

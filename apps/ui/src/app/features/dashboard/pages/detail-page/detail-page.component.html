@@ -61,7 +61,7 @@
                             <span
                                 class="src-dot"
                                 [ngClass]="metric.source || 'placeholder'"
-                                [attr.data-tip]="sourceTip(metric.source)"
+                                [attr.data-tip]="sourceTip(metric.source, metric.label)"
                             ></span>
                         </div>
                         <div
@@ -234,8 +234,15 @@
                         <div class="card-title">
                             Recent Activity
                             <span
-                                class="src-dot placeholder"
-                                [attr.data-tip]="sourceTip('placeholder')"
+                                class="src-dot"
+                                [class.placeholder]="!syncedCardsReal"
+                                [class.datadog]="syncedCardsReal"
+                                [attr.data-tip]="
+                                    sourceTip(
+                                        syncedCardsReal ? 'datadog' : 'placeholder',
+                                        'Recent Activity'
+                                    )
+                                "
                             ></span>
                         </div>
                         <div class="activity-log">
@@ -243,6 +250,12 @@
                                 <span class="activity-dot" [ngClass]="item.color"></span>
                                 <span class="activity-time">{{ item.time }}</span>
                                 <span class="activity-text">{{ item.text }}</span>
+                            </div>
+                            <div
+                                *ngIf="syncedCardsReal && view.activityLog.length === 0"
+                                class="activity-item activity-empty"
+                            >
+                                No recent activity recorded yet.
                             </div>
                         </div>
                     </div>
@@ -253,7 +266,10 @@
                 <div class="card">
                     <div class="card-title">
                         Health Status Timeline
-                        <span class="src-dot datadog" [attr.data-tip]="sourceTip('datadog')"></span>
+                        <span
+                            class="src-dot datadog"
+                            [attr.data-tip]="sourceTip('datadog', 'Health Status Timeline')"
+                        ></span>
                     </div>
                     <div
                         *ngFor="let row of view.healthRangeTimelines"
@@ -272,7 +288,7 @@
                             Uptime &amp; Error Budget
                             <span
                                 class="src-dot datadog"
-                                [attr.data-tip]="sourceTip('datadog')"
+                                [attr.data-tip]="sourceTip('datadog', 'Uptime & Error Budget')"
                             ></span>
                         </div>
                         <div class="metric-pair-grid">
@@ -304,15 +320,23 @@
                         <div class="card-title">
                             Health Check Breakdown
                             <span
-                                class="src-dot placeholder"
-                                [attr.data-tip]="sourceTip('placeholder')"
+                                class="src-dot"
+                                [class.datadog]="healthChecksLive"
+                                [class.placeholder]="!healthChecksLive"
+                                [attr.data-tip]="
+                                    sourceTip(
+                                        healthChecksLive ? 'datadog' : 'placeholder',
+                                        'Health Check Breakdown'
+                                    )
+                                "
                             ></span>
                         </div>
                         <div class="health-checks">
                             <div
                                 *ngFor="let check of view.healthChecks"
                                 class="health-check-row"
-                                [class.failing]="!check.ok"
+                                [ngClass]="healthCheckTone(check)"
+                                [title]="check.name"
                             >
                                 <span
                                     class="hc-icon"
@@ -320,8 +344,14 @@
                                     [class.fail]="!check.ok"
                                     >{{ check.ok ? '✓' : '✗' }}</span
                                 >
-                                <span class="hc-name">{{ check.name }}</span>
+                                <span class="hc-name">{{ healthCheckLabel(check.name) }}</span>
+                                <span class="hc-badge" *ngIf="check.status === 'paused'"
+                                    >paused</span
+                                >
                                 <span class="hc-time">{{ check.time }}</span>
+                            </div>
+                            <div *ngIf="view.healthChecks.length === 0" class="health-check-empty">
+                                No synthetic checks mapped to this application.
                             </div>
                         </div>
                     </div>
@@ -330,7 +360,10 @@
                 <div class="card">
                     <div class="card-title">
                         Datadog Monitors
-                        <span class="src-dot datadog" [attr.data-tip]="sourceTip('datadog')"></span>
+                        <span
+                            class="src-dot datadog"
+                            [attr.data-tip]="sourceTip('datadog', 'Datadog Monitors')"
+                        ></span>
                     </div>
                     <div class="monitor-list" *ngIf="view.monitors.length; else noMonitors">
                         <div *ngFor="let monitor of view.monitors" class="monitor-row">
@@ -410,8 +443,15 @@
                     <div class="card-title">
                         Recent Health Events
                         <span
-                            class="src-dot placeholder"
-                            [attr.data-tip]="sourceTip('placeholder')"
+                            class="src-dot"
+                            [class.placeholder]="!syncedCardsReal"
+                            [class.datadog]="syncedCardsReal"
+                            [attr.data-tip]="
+                                sourceTip(
+                                    syncedCardsReal ? 'datadog' : 'placeholder',
+                                    'Recent Health Events'
+                                )
+                            "
                         ></span>
                     </div>
                     <div class="table-scroll">
@@ -437,6 +477,12 @@
                                 </tr>
                             </tbody>
                         </table>
+                        <div
+                            *ngIf="syncedCardsReal && view.healthEvents.length === 0"
+                            class="table-empty"
+                        >
+                            No status changes recorded yet.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1287,6 +1333,130 @@
                             </div>
                         </ng-container>
                     </div>
+                </div>
+            </div>
+
+            <div class="tab-panel" [class.active]="activeTab === 'recommendations'">
+                <div class="card">
+                    <div class="card-title">
+                        Recommendations
+                        <span class="src-dot placeholder" [attr.data-tip]="recSourceTip"></span>
+                    </div>
+                    <div class="rec-ring-row">
+                        <span
+                            class="rec-ring"
+                            [ngClass]="'ring-' + recRingTone(recs?.currentScore ?? maturityScore)"
+                        ></span>
+                        <div>
+                            <div class="rec-score">
+                                Maturity {{ recs?.currentScore ?? maturityScore }}/5
+                                <span *ngIf="(recs?.currentScore ?? maturityScore) < 5">
+                                    → projected 5/5 if you complete {{ failingCount }} action(s)
+                                </span>
+                            </div>
+                            <div class="card-kicker">
+                                {{ recs?.notes || 'Turn the maturity gaps into grounded actions.' }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-kicker rec-provenance" *ngIf="recsGenerated">
+                        Suggested by assistant · mock LLM (deterministic) · based on sync
+                        {{ recs?.basedOnSyncAt | date: 'MMM d HH:mm' }} ·
+                        <span [ngClass]="recs?.freshness === 'stale' ? 't-amber' : 't-green'">{{
+                            recs?.freshness === 'stale' ? 'stale — re-sync to refresh' : 'live'
+                        }}</span>
+                    </div>
+                    <div class="button-row rec-button-row">
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            [disabled]="recsLoading"
+                            (click)="recsGenerated ? regenerate() : generateRecommendations()"
+                        >
+                            {{
+                                recsLoading
+                                    ? 'Generating…'
+                                    : recsGenerated
+                                      ? '⟳ Regenerate'
+                                      : 'Generate recommendations'
+                            }}
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    class="card rec-all-passing"
+                    *ngIf="recsGenerated && recs?.actions?.length === 0"
+                >
+                    Fully mature — all 5 signals passing. No actions needed.
+                </div>
+
+                <div class="card rec-skeleton" *ngIf="recsLoading" aria-busy="true">
+                    <div class="rec-skeleton-row"></div>
+                    <div class="rec-skeleton-row"></div>
+                </div>
+
+                <div class="card rec-error" *ngIf="recsError">
+                    {{ recsError }}
+                    <button type="button" class="btn btn-outline btn-small" (click)="regenerate()">
+                        Try again
+                    </button>
+                </div>
+
+                <div class="inc-card elevated rec-action" *ngFor="let action of recs?.actions">
+                    <div class="inc-header">
+                        <div class="inc-header-left">
+                            <span class="badge compact">{{ recCategory[action.signal] }}</span>
+                            <span class="inc-title">{{ action.title }}</span>
+                        </div>
+                        <div class="rec-chips">
+                            <span class="badge compact b-green"
+                                >+{{ action.expectedMaturityDelta }}</span
+                            >
+                            <span class="badge compact">{{ recEffortLabel[action.effort] }}</span>
+                            <span
+                                class="status-pill"
+                                [ngClass]="recConfidenceTone[action.confidence]"
+                                >conf {{ action.confidence }}</span
+                            >
+                        </div>
+                    </div>
+                    <div class="inc-meta">
+                        Owner: {{ action.owner }} ·
+                        <span
+                            class="src-dot placeholder"
+                            [attr.data-tip]="'Grounded on ' + action.evidence"
+                        ></span>
+                        grounded on {{ action.evidence }}
+                    </div>
+                    <button
+                        type="button"
+                        class="inc-expand"
+                        (click)="toggleRec(action.id)"
+                        [attr.aria-expanded]="isRecExpanded(action.id)"
+                    >
+                        {{ isRecExpanded(action.id) ? '▼ Hide details' : '▶ Expand details' }}
+                    </button>
+                    <div class="inc-details" [class.open]="isRecExpanded(action.id)">
+                        <div class="detail-heading">Why it matters</div>
+                        <p class="rec-text">{{ action.why }}</p>
+                        <div class="detail-heading">How to fix</div>
+                        <ol class="rec-steps">
+                            <li *ngFor="let step of action.howTo">{{ step }}</li>
+                        </ol>
+                        <div class="detail-heading">Expected impact</div>
+                        <p class="rec-text">
+                            Maturity +{{ action.expectedMaturityDelta }} →
+                            {{ (recs?.currentScore ?? 0) + action.expectedMaturityDelta }}/5
+                        </p>
+                        <div class="detail-heading">Evidence</div>
+                        <p class="rec-text">{{ action.evidence }}</p>
+                    </div>
+                </div>
+
+                <div class="card rec-empty" *ngIf="!recsGenerated && !recsLoading">
+                    Turn your maturity gaps into actions.
+                    <em>(use the Generate button above)</em>
                 </div>
             </div>
 

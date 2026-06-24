@@ -5,6 +5,7 @@ import {
     ApplicationStatus,
     DashboardDetailContactEntry,
     DashboardDetailContacts,
+    DashboardDetailHealthCheck,
     DashboardDetailMonitor,
     DashboardDetailPeople,
     DashboardDetailResponse,
@@ -12,7 +13,7 @@ import {
     DashboardDetailView,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { PortfolioAppContext } from '../portfolio.model';
+import { PortfolioAppContext, PortfolioSyntheticCheck } from '../portfolio.model';
 
 type HeatmapTone = 'g' | 'a' | 'r' | 'x';
 
@@ -466,6 +467,32 @@ const buildMonitorCards = (monitors?: ApplicationMonitor[]): DashboardDetailMoni
         inMaintenance: Boolean(monitor.inMaintenance),
     }));
 
+/**
+ * Value cell for a synthetic check (12-4): its 30-day uptime %, or why it has none.
+ * @param {PortfolioSyntheticCheck} check - the synthetic check
+ * @returns {string} the value-cell text
+ */
+const synthCheckValue = (check: PortfolioSyntheticCheck): string => {
+    if (check.uptime != null) return `${check.uptime.toFixed(2)}%`;
+    return check.status === 'paused' ? 'paused' : 'no data';
+};
+
+/**
+ * Maps the app's resolved synthetic checks (12-4) to Health Check Breakdown cards.
+ * `ok` = the check is live and reporting data (paused / no-data read as not-ok); the
+ * 30-day uptime % and lifecycle status are carried through for the UI.
+ * @param {PortfolioSyntheticCheck[]} [checks] - the app's synthetic checks
+ * @returns {DashboardDetailHealthCheck[]} the Health Check Breakdown cards
+ */
+const buildHealthCheckCards = (checks?: PortfolioSyntheticCheck[]): DashboardDetailHealthCheck[] =>
+    (checks ?? []).map((check) => ({
+        name: check.name,
+        ok: check.status === 'live' && check.uptime != null,
+        time: synthCheckValue(check),
+        uptime: check.uptime,
+        status: check.status,
+    }));
+
 const createContactEntry = (
     label: string,
     value?: string | null,
@@ -640,15 +667,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
         })),
         features: createFeatureCards(),
         heatmapRows: createHeatmapRows(),
-        healthChecks: [
-            { name: 'HTTPS Endpoint (beacon.mecer.com/api)', ok: true, time: '142ms' },
-            { name: 'Database Connectivity (primary)', ok: true, time: '2ms' },
-            { name: 'API Response Time < 2s', ok: true, time: '1.1s' },
-            { name: 'Queue Depth < 1000', ok: false, time: '1,247' },
-            { name: 'Disk Space > 20%', ok: true, time: '68% free' },
-            { name: 'Memory Usage < 85%', ok: true, time: '72%' },
-            { name: 'TLS Certificate Valid', ok: true, time: '33 days' },
-        ],
+        healthChecks: buildHealthCheckCards(app.syntheticChecks),
         monitors: buildMonitorCards(app.monitors),
         healthEvents: [
             {

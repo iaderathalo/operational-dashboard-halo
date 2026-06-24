@@ -1,12 +1,20 @@
 import {
     ApplicationMonitor,
     ApplicationStatus,
+    ApplicationSyntheticCheck,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { DatadogMonitor, DatadogMonitorState, DatadogSloSummary } from './datadog.types';
+import {
+    DatadogMonitor,
+    DatadogMonitorState,
+    DatadogSloSummary,
+    DatadogSyntheticCheck,
+} from './datadog.types';
 
 /** Cap on stored per-app monitors so a noisy app cannot bloat its document. */
 const MAX_MONITORS = 50;
+/** Cap on stored per-app synthetic checks so a heavily-tested app cannot bloat its doc. */
+const MAX_SYNTHETICS = 50;
 
 const STATUS_SEVERITY: Record<ApplicationStatus, number> = { GREEN: 0, AMBER: 1, RED: 2 };
 
@@ -71,6 +79,31 @@ export function buildMonitorBreakdown(monitors: DatadogMonitor[]): ApplicationMo
                 a.name.localeCompare(b.name)
         )
         .slice(0, MAX_MONITORS);
+}
+
+/**
+ * Per-check drill-down for an app (12-4 Health Check Breakdown): lowest-uptime first so
+ * problems surface, no-data/paused checks (null uptime) last, capped. Maps the Datadog
+ * shape to the stored ApplicationSyntheticCheck verbatim — the UI decides presentation.
+ * @param {DatadogSyntheticCheck[]} checks - the app's resolved synthetic tests
+ * @returns {ApplicationSyntheticCheck[]} the per-check breakdown
+ */
+export function buildSyntheticBreakdown(
+    checks: DatadogSyntheticCheck[]
+): ApplicationSyntheticCheck[] {
+    return checks
+        .map((check) => ({
+            publicId: check.publicId,
+            name: check.name,
+            type: check.type,
+            status: check.status,
+            uptime: check.uptime,
+        }))
+        .sort(
+            (a, b) =>
+                (a.uptime ?? Infinity) - (b.uptime ?? Infinity) || a.name.localeCompare(b.name)
+        )
+        .slice(0, MAX_SYNTHETICS);
 }
 
 export interface ComputedHealth {

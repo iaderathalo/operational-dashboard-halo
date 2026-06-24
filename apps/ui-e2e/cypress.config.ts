@@ -5,6 +5,7 @@ import setupNodeEvents from './src/plugins/index';
 
 module.exports = defineConfig({
     defaultCommandTimeout: 100000,
+    pageLoadTimeout: 120000,
     e2e: {
         fileServerFolder: '.',
         fixturesFolder: './src/fixtures',

@@ -15,3 +15,17 @@
 
 // Import commands.js using ES2015 syntax:
 import './commands';
+
+// The global stylesheet pulls in Google Fonts via a remote `@import`
+// (libs/shared/styles/app/_main.scss). CI runners have no external egress, so
+// that stylesheet never finishes downloading and the page never fires its
+// `load` event — making every `cy.visit` time out. The app already self-hosts
+// Noto Sans from /assets/fonts, so we stub the remote request with empty CSS to
+// let the page load. Registered here so it applies before every spec's visit.
+beforeEach(() => {
+    cy.intercept('https://fonts.googleapis.com/**', {
+        statusCode: 200,
+        headers: { 'content-type': 'text/css' },
+        body: '',
+    });
+});

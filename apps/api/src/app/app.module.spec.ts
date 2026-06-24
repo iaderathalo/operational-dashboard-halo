@@ -17,11 +17,17 @@ describe('configSchema', () => {
         APIGEE_CLIENT_ID: 'test-client-id',
         USE_REAL_DATA: 'false',
     };
+    // 11-4 — defaults the schema applies on top of validOutput only when validation succeeds.
+    const validDefaults = {
+        USE_REAL_PLANVIEW: 'false',
+        DIGEST_SCHEDULE: '0 13 * * MON',
+        DIGEST_DELIVERY_MODE: 'api',
+    };
 
     it('parses valid values', () => {
         const value = validInput;
         expect(configSchema.validate(value)).toStrictEqual({
-            value: validOutput,
+            value: { ...validOutput, ...validDefaults },
         });
     });
 
@@ -30,6 +36,7 @@ describe('configSchema', () => {
         expect(configSchema.validate(value)).toStrictEqual({
             value: {
                 ...validOutput,
+                ...validDefaults,
                 PORT: 8080,
             },
         });
@@ -54,6 +61,7 @@ describe('configSchema', () => {
         expect(configSchema.validate(value)).toStrictEqual({
             value: {
                 ...validOutput,
+                ...validDefaults,
                 BUILD_VERSION: '0.0.1',
             },
         });

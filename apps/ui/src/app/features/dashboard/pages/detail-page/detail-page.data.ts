@@ -1,10 +1,53 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import {
+    DashboardDetailActivityItem,
+    DashboardDetailActivityTone,
+    DashboardDetailHealthCheck,
+    DashboardDetailHealthEvent,
+    DashboardDetailSource,
+    DashboardDetailStatus,
     DashboardDetailTimelineTone,
     HealthSnapshot,
+    RecConfidence,
+    RecEffort,
+    RecSignal,
+    RecommendationAction,
+    RecommendationResult,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { PortfolioApp, PortfolioAppContext, PortfolioNode } from '../../models/portfolio.model';
+import { METRIC_DESCRIPTIONS, MetricKey, formatMetricTooltip } from '../../metric-descriptions';
+import {
+    AppMaturity,
+    PortfolioApp,
+    PortfolioAppContext,
+    PortfolioNode,
+} from '../../models/portfolio.model';
+
+/**
+ * Shortens a raw synthetic test name for the Health Check Breakdown card: drops the
+ * trailing `_SNSVC<id>_<APPKEY>` and the org prefix, then spaces out the rest. The full
+ * name stays available as a hover title.
+ * @param {string} name - raw synthetic test name
+ * @returns {string} a readable short label
+ */
+export function shortenSyntheticCheckName(name: string): string {
+    return (name || '')
+        .replace(/_SNSVC\d+_[A-Za-z0-9]+$/i, '')
+        .replace(/^Mercer[_ ]/i, '')
+        .replace(/_/g, ' ')
+        .trim();
+}
+
+/**
+ * Tone class for a synthetic check by 30-day uptime: `hc-good` (>=99%), `hc-warn`
+ * (<99%), or `hc-nodata` (null — paused / errored window).
+ * @param {DashboardDetailHealthCheck} check - the health-check card
+ * @returns {string} the tone class
+ */
+export function syntheticCheckTone(check: DashboardDetailHealthCheck): string {
+    if (check.uptime == null) return 'hc-nodata';
+    return check.uptime >= 99 ? 'hc-good' : 'hc-warn';
+}
 
 export type DetailTabId =
     | 'overview'
@@ -14,12 +57,20 @@ export type DetailTabId =
     | 'ai-drift'
     | 'cost'
     | 'incidents'
+    | 'recommendations'
     | 'contacts'
     | 'settings';
 
 export type IssueType = 'Availability / Outage' | 'Performance / Perception Degradation' | 'Both';
 
 type HeatmapTone = 'g' | 'a' | 'r' | 'x';
+
+/**
+ * When true, the Perception tab and its related UI surfaces are hidden because
+ * the Perception data source is not yet wired to a live feed.
+ * Flip to false once Perception is live to reveal the tab everywhere.
+ */
+export const PERCEPTION_PLACEHOLDER = true;
 
 export const DETAIL_TABS: ReadonlyArray<{ id: DetailTabId; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -29,6 +80,7 @@ export const DETAIL_TABS: ReadonlyArray<{ id: DetailTabId; label: string }> = [
     { id: 'ai-drift', label: 'AI Drift' },
     { id: 'cost', label: 'Cost' },
     { id: 'incidents', label: 'Incidents' },
+    { id: 'recommendations', label: 'Recommendations' },
     { id: 'contacts', label: 'Contacts' },
     { id: 'settings', label: 'Settings' },
 ];
@@ -212,6 +264,166 @@ export const buildHealthTimeline = (
     );
 
     return { bars, axis };
+};
+
+const MAX_ACTIVITY_ITEMS = 12;
+
+const HEALTH_EVENT_LABELS: Record<string, string> = {
+    GREEN: 'Green',
+    AMBER: 'Amber',
+    RED: 'Red',
+};
+
+const HEALTH_ACTIVITY_TONE: Record<string, DashboardDetailActivityTone> = {
+    GREEN: 'green',
+    AMBER: 'amber',
+    RED: 'red',
+};
+
+/**
+ * Title-case label for a snapshot status. An unknown status falls to Amber so a
+ * derived event never reads a false Green (PRD FR-2/FR-3, 5-6).
+ * @param {string} status Snapshot status code.
+ * @returns {string} Display label.
+ */
+const healthEventLabel = (status: string): string => HEALTH_EVENT_LABELS[status] ?? 'Amber';
+
+/**
+ * Activity tone for a snapshot status; unknown falls to amber, never green.
+ * @param {string} status Snapshot status code.
+ * @returns {DashboardDetailActivityTone} Tone for the activity dot.
+ */
+const healthActivityTone = (status: string): DashboardDetailActivityTone =>
+    HEALTH_ACTIVITY_TONE[status] ?? 'amber';
+
+/**
+ * Formats an ISO timestamp as a compact "MMM DD HH:MM" event time.
+ * @param {string} iso ISO timestamp.
+ * @returns {string} Compact date-time label.
+ */
+const formatEventTime = (iso: string): string =>
+    `${formatTimelineAxisLabel(iso.slice(0, 10))} ${iso.slice(11, 16)}`;
+
+/**
+ * Humanizes the gap between two ISO timestamps (time spent in the prior state).
+ * @param {string} fromIso Earlier timestamp.
+ * @param {string} toIso Later timestamp.
+ * @returns {string} Human-readable duration, or "—" when not derivable.
+ */
+const formatStateDuration = (fromIso: string, toIso: string): string => {
+    const ms = Date.parse(toIso) - Date.parse(fromIso);
+    if (!Number.isFinite(ms) || ms <= 0) {
+        return '—';
+    }
+    const minutes = Math.round(ms / 60000);
+    if (minutes < 60) {
+        return `${minutes} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        const remMinutes = minutes % 60;
+        return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+};
+
+/**
+ * Derives Recent Health Events by diffing consecutive Health snapshots: one row
+ * per adjacent pair whose status changes, newest first. Duration is the time the
+ * app spent in the prior state. No-change runs produce no row; an unknown status
+ * reads Amber, never a false Green. Pure derivation over the already-synced series
+ * — no Datadog call (E12-S1).
+ * @param {readonly HealthSnapshot[]} points Health records, any order.
+ * @returns {DashboardDetailHealthEvent[]} Status transitions, newest first.
+ */
+export const buildHealthEvents = (
+    points: readonly HealthSnapshot[]
+): DashboardDetailHealthEvent[] => {
+    const ordered = [...points].sort((left, right) =>
+        left.recordedAt.localeCompare(right.recordedAt)
+    );
+
+    const events: DashboardDetailHealthEvent[] = [];
+    for (let index = 1; index < ordered.length; index += 1) {
+        const previous = ordered[index - 1];
+        const current = ordered[index];
+        if (previous.status !== current.status) {
+            const fromLabel = healthEventLabel(previous.status);
+            const toLabel = healthEventLabel(current.status);
+            events.push({
+                time: formatEventTime(current.recordedAt),
+                event: `Health changed ${fromLabel} → ${toLabel}`,
+                fromLabel,
+                toLabel,
+                source: 'Datadog',
+                duration: formatStateDuration(previous.recordedAt, current.recordedAt),
+            });
+        }
+    }
+
+    return events.reverse();
+};
+
+/**
+ * Builds the Recent Activity feed from our own already-synced signals: health
+ * transitions, mapping/provenance changes, and the latest sync run — newest first,
+ * capped. Pure derivation over the snapshot series; no Datadog call (E12-S1).
+ * @param {readonly HealthSnapshot[]} points Health records, any order.
+ * @returns {DashboardDetailActivityItem[]} Activity items, newest first.
+ */
+export const buildActivityFeed = (
+    points: readonly HealthSnapshot[]
+): DashboardDetailActivityItem[] => {
+    const ordered = [...points].sort((left, right) =>
+        left.recordedAt.localeCompare(right.recordedAt)
+    );
+    if (!ordered.length) {
+        return [];
+    }
+
+    const stamped: Array<{ at: string; item: DashboardDetailActivityItem }> = [];
+    const push = (at: string, color: DashboardDetailActivityTone, text: string): void => {
+        stamped.push({ at, item: { time: formatEventTime(at), color, text } });
+    };
+
+    for (let index = 1; index < ordered.length; index += 1) {
+        const previous = ordered[index - 1];
+        const current = ordered[index];
+        if (previous.status !== current.status) {
+            push(
+                current.recordedAt,
+                healthActivityTone(current.status),
+                `Health changed ${healthEventLabel(previous.status)} → ${healthEventLabel(current.status)}`
+            );
+        }
+        if (
+            previous.datadogMapped !== current.datadogMapped ||
+            previous.resolutionPath !== current.resolutionPath
+        ) {
+            push(
+                current.recordedAt,
+                'accent',
+                current.datadogMapped
+                    ? `Mapping updated — now ${current.resolutionPath} in Datadog`
+                    : 'Mapping updated — no longer monitored in Datadog'
+            );
+        }
+    }
+
+    const latest = ordered[ordered.length - 1];
+    push(
+        latest.recordedAt,
+        'grey',
+        latest.datadogMapped
+            ? `Health sync completed — status ${healthEventLabel(latest.status)}`
+            : 'Health sync completed — not monitored in Datadog'
+    );
+
+    return stamped
+        .sort((left, right) => right.at.localeCompare(left.at))
+        .slice(0, MAX_ACTIVITY_ITEMS)
+        .map((entry) => entry.item);
 };
 
 const createHeatmapRows = (): Array<{
@@ -1145,3 +1357,284 @@ export const createDetailView = (context: PortfolioAppContext | null) => {
 };
 
 export type DetailViewModel = ReturnType<typeof createDetailView>;
+
+// ---------------------------------------------------------------------------
+// 12-x Recommendations — display lookup maps + demo-mode grounded builder.
+// The lookups are pure data so they can be exposed to the template via the
+// `readonly foo = MAP` field-reference trick (no class-methods-use-this).
+// ---------------------------------------------------------------------------
+
+/** Category label shown on each recommendation card, grouped by the gap it closes. */
+export const REC_SIGNAL_CATEGORY: Record<RecSignal, string> = {
+    mapped: 'Catalog',
+    hasOwner: 'Ownership',
+    hasMonitor: 'Observability',
+    hasSLO: 'Observability',
+    sloPassing: 'Observability',
+    other: 'Other',
+};
+
+/** Compact effort chip label. */
+export const REC_EFFORT_LABEL: Record<RecEffort, string> = {
+    low: 'Low',
+    medium: 'Med',
+    high: 'High',
+};
+
+/** Status-pill tone class for a confidence level (green/amber/grey). */
+export const REC_CONFIDENCE_TONE: Record<RecConfidence, string> = {
+    high: 'green',
+    medium: 'amber',
+    low: 'grey',
+};
+
+/**
+ * Ring tone for the maturity scorecard header: good (>=5), warn (>=3), else risk.
+ * Written as an explicit if-chain to satisfy the no-nested-ternary lint rule.
+ * @param {number} score - the maturity score (0–5)
+ * @returns {string} the ring tone suffix (`good` | `warn` | `risk`)
+ */
+export const recRingTone = (score: number): string => {
+    if (score >= 5) {
+        return 'good';
+    }
+    if (score >= 3) {
+        return 'warn';
+    }
+    return 'risk';
+};
+
+// Seed table + ordering ranks mirror the API MockLlmClient verbatim so the demo
+// tab is honest and ranks identically to real mode.
+const REC_SIGNAL_SEED: Record<RecSignal, { effort: RecEffort; confidence: RecConfidence }> = {
+    mapped: { effort: 'low', confidence: 'high' },
+    hasMonitor: { effort: 'low', confidence: 'high' },
+    hasSLO: { effort: 'medium', confidence: 'high' },
+    sloPassing: { effort: 'high', confidence: 'medium' },
+    hasOwner: { effort: 'low', confidence: 'high' },
+    other: { effort: 'medium', confidence: 'low' },
+};
+
+const REC_EFFORT_RANK: Record<RecEffort, number> = { low: 0, medium: 1, high: 2 };
+const REC_CONF_RANK: Record<RecConfidence, number> = { high: 0, medium: 1, low: 2 };
+const REC_SIGNAL_PRIORITY: Record<RecSignal, number> = {
+    mapped: 0,
+    hasOwner: 1,
+    hasMonitor: 2,
+    hasSLO: 3,
+    sloPassing: 4,
+    other: 5,
+};
+
+const REC_SIGNAL_TITLE: Record<RecSignal, string> = {
+    mapped: 'Map the app to Datadog',
+    hasMonitor: 'Add a Datadog monitor',
+    hasSLO: 'Define a Datadog SLO',
+    sloPassing: 'Restore the SLO to passing',
+    hasOwner: 'Assign an accountable owner',
+    other: 'Close the remaining maturity gap',
+};
+
+const REC_SIGNAL_WHY: Record<RecSignal, string> = {
+    mapped: 'The app is not linked to Datadog, so none of its health, uptime, or alerting can be observed.',
+    hasMonitor:
+        'No Datadog monitor is attached, so failures are not alerted on and health cannot be derived.',
+    hasSLO: 'Uptime is not formalized into an SLO, so there is no error budget and no burn alerting.',
+    sloPassing:
+        'An SLO exists but is not currently passing, so the error budget is being consumed and reliability is at risk.',
+    hasOwner:
+        'No accountable owner is recorded, so escalations and remediation have no clear destination.',
+    other: 'A maturity signal is still failing and should be closed to reach full maturity.',
+};
+
+const REC_SIGNAL_HOWTO: Record<RecSignal, string[]> = {
+    mapped: [
+        "Tag the app's services with its short key in Datadog",
+        'Confirm the mapping resolves on the next sync',
+    ],
+    hasMonitor: [
+        "Create a Datadog monitor on the app's key endpoint or host",
+        'Link the monitor to this app via its service tag',
+    ],
+    hasSLO: [
+        'In Datadog → Service Mgmt → SLOs → New SLO, choose Monitor-based',
+        "Base it on the app's existing synthetic or uptime monitor",
+        "Set a rolling 30-day target and link it to this app's service tag",
+    ],
+    sloPassing: [
+        'Identify the top failing monitors or synthetic steps driving the gap',
+        'Quantify the 30-day error-budget burn',
+        'Drive the uptime gap back above target with the owning team',
+    ],
+    hasOwner: [
+        'Record an IT, portfolio, or business owner in PlanView',
+        'Confirm the owner resolves on the next sync',
+    ],
+    other: ['Review the failing maturity signal', 'Plan and execute the remediation'],
+};
+
+/**
+ * Grounds a maturity score and its failing signals into demo recommendation cards
+ * that rank identically to real mode. Demo cards never fabricate a metric value:
+ * `uptime`/`slaTarget` are cited only when present, otherwise rendered "not available".
+ * @param {AppMaturity | undefined} maturity - the app's maturity score + signals
+ * @param {object} grounding - the (possibly null) uptime/slaTarget/owner to cite
+ * @param {number | null} grounding.uptime - 30-day uptime percentage, or null
+ * @param {number | null} grounding.slaTarget - SLA target percentage, or null
+ * @param {string | null} grounding.owner - resolved owner display name, or null
+ * @returns {RecommendationAction[]} ranked, grounded actions (one per failing signal)
+ */
+const buildDemoRecommendationActions = (
+    maturity: AppMaturity | undefined,
+    grounding: { uptime: number | null; slaTarget: number | null; owner: string | null }
+): RecommendationAction[] => {
+    if (!maturity) {
+        return [];
+    }
+
+    const ownerLabel = grounding.owner ? `${grounding.owner} (IT)` : 'unassigned';
+    const uptimeText =
+        grounding.uptime != null
+            ? `uptime30d=${grounding.uptime.toFixed(2)}%`
+            : 'uptime30d=not available';
+    const slaText =
+        grounding.slaTarget != null
+            ? `slaTarget=${grounding.slaTarget}%`
+            : 'slaTarget=not available';
+
+    const failing = (Object.entries(maturity.signals) as Array<[RecSignal, boolean]>)
+        .filter(([, value]) => !value)
+        .map(([signal]) => signal);
+
+    const actions = failing.map((signal) => {
+        const seed = REC_SIGNAL_SEED[signal];
+        return {
+            id: `rec-${signal}`,
+            signal,
+            title: REC_SIGNAL_TITLE[signal],
+            why: REC_SIGNAL_WHY[signal],
+            howTo: REC_SIGNAL_HOWTO[signal],
+            expectedMaturityDelta: 1,
+            effort: seed.effort,
+            owner: ownerLabel,
+            evidence: `${signal}=false · ${uptimeText} · ${slaText}`,
+            confidence: seed.confidence,
+        };
+    });
+
+    return actions.sort(
+        (left, right) =>
+            REC_EFFORT_RANK[left.effort] - REC_EFFORT_RANK[right.effort] ||
+            right.expectedMaturityDelta - left.expectedMaturityDelta ||
+            REC_CONF_RANK[left.confidence] - REC_CONF_RANK[right.confidence] ||
+            REC_SIGNAL_PRIORITY[left.signal] - REC_SIGNAL_PRIORITY[right.signal]
+    );
+};
+
+/**
+ * Builds a grounded {@link RecommendationResult} for demo mode from an app's maturity,
+ * so the Recommendations tab is never blank off real data and stays honest (no
+ * fabricated values; freshness reflects the demo app's last sync status).
+ * @param {PortfolioApp} app - the demo portfolio app
+ * @returns {RecommendationResult} a grounded, ranked recommendation payload
+ */
+export const buildDemoRecommendations = (app: PortfolioApp): RecommendationResult => {
+    const currentScore = app.maturity?.score ?? 0;
+    const actions = buildDemoRecommendationActions(app.maturity, {
+        uptime: app.uptime ?? null,
+        slaTarget: app.slaTarget ?? null,
+        owner: null,
+    });
+    const freshness = app.lastSyncStatus === 'ok' ? 'live' : 'stale';
+    const notes =
+        actions.length === 0
+            ? 'Fully mature — all 5 maturity signals are passing. No actions needed.'
+            : `${actions.length} maturity signal(s) still failing; complete the actions below to reach 5/5.`;
+
+    return {
+        appId: app.id,
+        generatedAt: new Date().toISOString(),
+        basedOnSyncAt: app.lastSyncAt ?? null,
+        currentScore,
+        targetScore: 5,
+        freshness,
+        actions,
+        notes,
+    };
+};
+
+/** Detail-card titles that have a metric-description triad (how-calculated · source · meaning). */
+const DETAIL_CARD_METRIC_KEYS: Record<string, MetricKey> = {
+    'Uptime (30d)': 'uptimeDetail',
+    'Error Budget': 'errorBudget',
+    // Health tab card titles mapped to descriptions
+    'Health Status Timeline': 'healthTimeline',
+    'Uptime & Error Budget': 'uptimeBudget',
+    'Datadog Monitors': 'monitors',
+    // Synced-data cards (overview + health tabs)
+    'Recent Activity': 'recentActivity',
+    'Recent Health Events': 'recentHealthEvents',
+    'Health Check Breakdown': 'healthCheckBreakdown',
+};
+
+/**
+ * Builds a provenance tooltip for a detail card, optionally prefixed with the metric description
+ * triad (how-calculated · source · meaning) when the metric label has a known entry.
+ * @param {DashboardDetailSource} [source] - where the card's data comes from
+ * @param {string} [metricLabel] - the metric label used to look up the description triad
+ * @returns {string} human-readable provenance for a native tooltip
+ */
+export function buildSourceTip(source?: DashboardDetailSource, metricLabel?: string): string {
+    if (source === 'placeholder') {
+        return 'Placeholder — not wired to a live source yet';
+    }
+    const key = metricLabel ? DETAIL_CARD_METRIC_KEYS[metricLabel] : undefined;
+    const staticDesc = key ? `${formatMetricTooltip(METRIC_DESCRIPTIONS[key])}\n` : '';
+    if (source === 'datadog') {
+        return `${staticDesc}Live · Datadog`;
+    }
+    if (source === 'planview') {
+        return `${staticDesc}Real · from PlanView (not Datadog)`;
+    }
+    return 'Placeholder — not wired to a live source yet';
+}
+
+/**
+ * Maps a health or perception status code to the display label used in the UI.
+ * @param {DashboardDetailStatus} status - status code to convert
+ * @param {string} type - status family to look up
+ * @returns {string} human-readable label for the supplied status
+ */
+export const statusLabel = (
+    status: DashboardDetailStatus,
+    type: 'health' | 'perception' = 'health'
+): string =>
+    type === 'perception' ? PERCEPTION_STATUS_LABELS[status] : HEALTH_STATUS_LABELS[status];
+
+/**
+ * Filters a Health series to the records within the given range (24h/7d/30d). An unknown
+ * range returns the full series.
+ * @param {HealthSnapshot[]} points - Health records
+ * @param {string} range - active range label
+ * @returns {HealthSnapshot[]} records recorded within the range
+ */
+export const windowHealthByRange = (points: HealthSnapshot[], range: string): HealthSnapshot[] => {
+    const windowDays: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30 };
+    const span = windowDays[range];
+    if (!span) {
+        return points;
+    }
+    const cutoff = Date.now() - span * 24 * 60 * 60 * 1000;
+    return points.filter((point) => {
+        const recordedAt = Date.parse(point.recordedAt);
+        return Number.isNaN(recordedAt) ? true : recordedAt >= cutoff;
+    });
+};
+
+/**
+ * Computes the SVG stroke-dash offset for the perception gauge from a 0–100 score.
+ * @param {number} score - perception score (0–100)
+ * @returns {number} stroke-dash offset for the gauge ring
+ */
+export const perceptionGaugeOffsetFor = (score: number): number =>
+    Number((235.6 * (1 - score / 100)).toFixed(1));

@@ -3,6 +3,12 @@
 } @else if (isLoading) {
     <div class="dashboard-state">Loading dashboard...</div>
 } @else {
+    <div class="pf-readonly-banner" *ngIf="readOnly" role="status">
+        <span class="pf-readonly-dot"></span>
+        <span class="pf-readonly-text"
+            >Read-only snapshot — interactive controls are disabled.</span
+        >
+    </div>
     <div class="layout">
         <button
             *ngIf="isMobileViewport && isMobileSidebarOpen"
@@ -135,7 +141,7 @@
                             >
                         </div>
                     </div>
-                    <div class="pf-summary-stat">
+                    <div class="pf-summary-stat" *ngIf="!placeholderColumns.perception">
                         <span class="label">User Perception</span>
                         <div class="breakdown">
                             <span class="g"
@@ -172,6 +178,50 @@
                         >
                             {{ totalIncidents(getAllApps(currentNode)) }}
                         </span>
+                    </div>
+                </div>
+
+                <div
+                    class="pf-risk-panel"
+                    *ngIf="topRiskNodesCache.length || topRiskAppsCache.length"
+                >
+                    <h2 class="section-title">Top risks — where to look</h2>
+                    <div class="pf-risk-cols">
+                        <div class="pf-risk-col" *ngIf="topRiskNodesCache.length">
+                            <h4>Highest-risk areas</h4>
+                            <p class="pf-risk-note">
+                                Ranked by lowest coverage + lowest health, weighted by app count.
+                            </p>
+                            <div
+                                class="pf-risk-row"
+                                *ngFor="let n of topRiskNodesCache"
+                                (click)="navigateToNode(n.id)"
+                            >
+                                <span class="pf-risk-name">{{ n.name }}</span>
+                                <span class="pf-risk-meta">
+                                    Coverage {{ rollupPct(nodeRollup(n).coveragePct) }} · Healthy
+                                    {{ rollupPct(nodeRollup(n).healthyPct) }} ·
+                                    {{ nodeRollup(n).appCount }} apps
+                                </span>
+                            </div>
+                        </div>
+                        <div class="pf-risk-col" *ngIf="topRiskAppsCache.length">
+                            <h4>Worst apps</h4>
+                            <p class="pf-risk-note">
+                                Ranked by health severity, then error-budget burn rate.
+                            </p>
+                            <div
+                                class="pf-risk-row"
+                                *ngFor="let a of topRiskAppsCache"
+                                (click)="openAppDetail(a)"
+                            >
+                                <span class="status-dot" [ngClass]="a.health"></span>
+                                <span class="pf-risk-name">{{ a.name }}</span>
+                                <span class="pf-risk-meta" [ngClass]="burnRateClass(a)">
+                                    {{ burnRateLabel(a) }}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -214,6 +264,17 @@
             </svg>
             <span class="subpf-name">{{ node.name }}</span>
             <span class="subpf-owner">{{ node.owner }} ({{ node.role }})</span>
+            <span class="subpf-rollup" *ngIf="nodeRollup(node).appCount > 0">
+                <span class="pf-badge">Healthy {{ rollupPct(nodeRollup(node).healthyPct) }}</span>
+                <span class="pf-badge">Coverage {{ rollupPct(nodeRollup(node).coveragePct) }}</span>
+                <span class="pf-badge" *ngIf="nodeRollup(node).avgMaturity != null">
+                    Maturity {{ nodeRollup(node).avgMaturity }}/5
+                </span>
+                <span class="pf-badge pf-badge-warn" *ngIf="nodeRollup(node).fastBurnCount > 0">
+                    {{ nodeRollup(node).fastBurnCount }} burning
+                </span>
+                <span class="pf-badge">{{ nodeRollup(node).appCount }} apps</span>
+            </span>
         </div>
 
         <div class="subpf-body" [class.open]="expandedSections.has(node.id)">
@@ -238,7 +299,7 @@
                     </span>
                 </div>
 
-                <div class="subpf-status-block">
+                <div class="subpf-status-block" *ngIf="!placeholderColumns.perception">
                     <span class="subpf-status-label">User Perception:</span>
                     <span class="status-count green">
                         <span class="status-dot green"></span
@@ -278,12 +339,26 @@
     <div class="table-scroll">
         <table class="app-table">
             <thead>
+                <!--
+                  Group super-header: only shown when BOTH groups are visible.
+                  While Perception is hidden (placeholderColumns.perception = true),
+                  the "APP MONITORING" bar is redundant and visually heavy — suppress it.
+                  When Perception eventually goes live (13-5), this row re-appears as a
+                  subtle tinted label rather than the original dark-navy block.
+                -->
+                <tr class="col-group-row" *ngIf="!placeholderColumns.perception">
+                    <th></th>
+                    <th colspan="4" class="col-group-monitoring">App Monitoring</th>
+                    <th colspan="1" class="col-group-perception">App Perception</th>
+                    <th colspan="5"></th>
+                </tr>
                 <tr>
                     <th>Application</th>
                     <th>Health</th>
-                    <th>Perception</th>
-                    <th>Uptime</th>
                     <th>Maturity</th>
+                    <th>Uptime</th>
+                    <th>Burn Rate</th>
+                    <th *ngIf="!placeholderColumns.perception">Perception</th>
                     <th>Total External Users</th>
                     <th>Total Internal Users</th>
                     <th>Active Users</th>
@@ -312,15 +387,28 @@
                         </div>
                     </td>
                     <td
-                        data-label="Perception"
-                        [class.placeholder-col]="placeholderColumns.perception"
+                        data-label="Maturity"
+                        class="maturity-cell"
+                        [class.metric-muted]="!app.maturity"
                     >
-                        <div class="status-cell">
-                            <span class="status-dot" [ngClass]="app.perception"></span>
-                            <span class="status-text" [ngClass]="app.perception">{{
-                                perceptionLabel(app.perception)
-                            }}</span>
+                        <div class="maturity-indicator" *ngIf="app.maturity; else noMaturity">
+                            <span
+                                *ngFor="let seg of maturitySegments(app)"
+                                class="mat-seg prov-cell"
+                                title=""
+                                [ngClass]="seg.cls"
+                                [attr.data-prov]="seg.tip"
+                            ></span>
                         </div>
+                        <span
+                            class="mat-label prov-cell"
+                            title=""
+                            *ngIf="app.maturity"
+                            [attr.data-prov]="maturityScoreTooltip(app)"
+                        >
+                            {{ app.maturity.score }}/{{ app.maturity.max }}
+                        </span>
+                        <ng-template #noMaturity>—</ng-template>
                     </td>
                     <td
                         data-label="Uptime"
@@ -332,13 +420,21 @@
                         {{ app.uptime | formatUptime }}
                     </td>
                     <td
-                        data-label="Maturity"
+                        data-label="Burn Rate"
                         class="prov-cell"
                         title=""
-                        [class.metric-muted]="!app.maturity"
-                        [attr.data-prov]="maturityTooltip(app)"
+                        [ngClass]="burnRateClass(app)"
+                        [attr.data-prov]="burnRateTooltip(app)"
                     >
-                        {{ app.maturity ? app.maturity.score + '/' + app.maturity.max : '—' }}
+                        {{ burnRateLabel(app) }}
+                    </td>
+                    <td *ngIf="!placeholderColumns.perception" data-label="Perception">
+                        <div class="status-cell">
+                            <span class="status-dot" [ngClass]="app.perception"></span>
+                            <span class="status-text" [ngClass]="app.perception">{{
+                                perceptionLabel(app.perception)
+                            }}</span>
+                        </div>
                     </td>
                     <td data-label="Total External Users">{{ app.totalExternalUsers | number }}</td>
                     <td data-label="Total Internal Users">{{ app.totalInternalUsers | number }}</td>

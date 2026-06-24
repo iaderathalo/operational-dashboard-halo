@@ -3,19 +3,27 @@ import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import {
     DashboardDetailResponse,
     DashboardSummary,
+    DigestSummary,
     HealthHistoryResponse,
+    RecommendationResult,
+    SnapshotMetadata,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardService from './dashboard.service';
 import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
+import RecommendationsService from '../recommendations/recommendations.service';
 
 @Controller('dashboard')
 export default class DashboardController {
     /**
      * Creates the dashboard controller.
      * @param {object} dashboardService - service for dashboard endpoints
+     * @param {object} recommendationsService - service for grounded maturity recommendations
      */
-    constructor(private readonly dashboardService: DashboardService) {}
+    constructor(
+        private readonly dashboardService: DashboardService,
+        private readonly recommendationsService: RecommendationsService
+    ) {}
 
     /**
      * Resolves the email used to scope results. The dashboard shows all
@@ -114,6 +122,32 @@ export default class DashboardController {
     }
 
     /**
+     * Returns grounded, provider-agnostic maturity-remediation recommendations for an
+     * application. Read-only and freshness-honest — never triggers a new Datadog call.
+     * `refresh=1` busts the per-app cache (the UI "Regenerate").
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
+     * @param {string} id - portfolio application identifier
+     * @param {string} [refresh] - '1' to bypass the cache
+     * @param {string} [scope] - 'mine' to scope to owned apps, otherwise all
+     * @returns {Promise<object>} the grounded recommendation payload
+     */
+    @Get('portfolio/apps/:id/recommendations')
+    async getAppRecommendations(
+        @Req() request: { user?: { email?: string } },
+        @Param('id') id: string,
+        @Query('refresh') refresh?: string,
+        @Query('scope') scope?: string
+    ): Promise<RecommendationResult> {
+        return this.recommendationsService.getRecommendations(
+            id,
+            DashboardController.scopedEmail(scope, request.user?.email),
+            refresh === '1'
+        );
+    }
+
+    /**
      * Returns aggregate dashboard metrics.
      * @param {object} request - authenticated request wrapper
      * @param {object} [request.user] - authenticated user payload when present
@@ -127,6 +161,43 @@ export default class DashboardController {
         @Query('scope') scope?: string
     ): Promise<DashboardSummary> {
         return this.dashboardService.getSummary(
+            DashboardController.scopedEmail(scope, request.user?.email)
+        );
+    }
+
+    /**
+     * 11-4: executive digest (portfolio roll-up, coverage %, freshness) from stored data.
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the digest
+     * @param {string} [scope] - 'mine' to scope to owned apps, otherwise all
+     * @returns {Promise<object>} the derived digest summary
+     */
+    @Get('digest')
+    async getDigest(
+        @Req() request: { user?: { email?: string } },
+        @Query('scope') scope?: string
+    ): Promise<DigestSummary> {
+        return this.dashboardService.getDigest(
+            DashboardController.scopedEmail(scope, request.user?.email)
+        );
+    }
+
+    /**
+     * 11-4: read-only, forwardable portfolio snapshot + freshness metadata. Reuses the
+     * existing scope plumbing so a `mine` snapshot only contains the caller's own apps.
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the snapshot
+     * @param {string} [scope] - 'mine' to scope to owned apps, otherwise all
+     * @returns {Promise<object>} the portfolio tree and snapshot metadata
+     */
+    @Get('snapshot')
+    async getSnapshot(
+        @Req() request: { user?: { email?: string } },
+        @Query('scope') scope?: string
+    ): Promise<{ portfolio: PortfolioNode; metadata: SnapshotMetadata }> {
+        return this.dashboardService.getSnapshot(
             DashboardController.scopedEmail(scope, request.user?.email)
         );
     }

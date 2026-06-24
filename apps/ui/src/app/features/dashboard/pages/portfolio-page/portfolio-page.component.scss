@@ -47,6 +47,26 @@
     color: var(--red);
 }
 
+.pf-readonly-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--amber-bg);
+    color: var(--amber);
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--amber);
+}
+
+.pf-readonly-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex: 0 0 auto;
+}
+
 .sidebar-backdrop,
 .mobile-tree-toolbar {
     display: none;
@@ -512,6 +532,16 @@
     color: var(--grey);
 }
 
+.metric-warn {
+    font-weight: 700;
+    color: var(--amber);
+}
+
+.metric-good {
+    font-weight: 700;
+    color: var(--green);
+}
+
 .placeholder-col {
     opacity: 0.4;
 }
@@ -521,21 +551,58 @@
     cursor: help;
 }
 
+// Column group super-header — subtle tinted bar, only rendered when both groups
+// are visible (see the *ngIf in the template). Light tint / thin border replaces
+// the original heavy dark-navy block so it does not dominate the table.
+.col-group-row th {
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    padding: 4px 16px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    vertical-align: bottom;
+    text-transform: uppercase;
+}
+
+.col-group-row th:first-child,
+.col-group-row th:last-child {
+    background: var(--bg);
+}
+
+.col-group-monitoring {
+    background: var(--accent-light) !important;
+    color: var(--accent) !important;
+}
+
+.col-group-perception {
+    background: #f0f4ff !important;
+    color: var(--primary-lighter) !important;
+}
+
+// Tooltip for provenance cells. Positioned fixed-like via high z-index so it is not
+// clipped by the .table-scroll overflow container. max-width + white-space: pre-line
+// keeps multi-line copy readable without overflowing the viewport.
 .prov-cell::after {
     content: attr(data-prov);
     position: absolute;
-    left: 12px;
-    top: calc(100% - 8px);
-    z-index: 5;
-    padding: 5px 9px;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 9999;
+    padding: 6px 10px;
     border-radius: 6px;
     background: var(--text);
     color: #fff;
     font-size: 11px;
     font-weight: 500;
-    line-height: 1.3;
-    white-space: nowrap;
-    box-shadow: var(--shadow);
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-line;
+    width: max-content;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(26, 39, 68, 0.18);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.12s ease;
@@ -545,11 +612,12 @@
     opacity: 1;
 }
 
-// Flip the tooltip above the cell on the last row so it is never clipped by the
+// Flip above the cell on the last two rows so the tooltip is never clipped by the
 // table's bottom edge.
-.app-table tbody tr:last-child .prov-cell::after {
+.app-table tbody tr:last-child .prov-cell::after,
+.app-table tbody tr:nth-last-child(2) .prov-cell::after {
     top: auto;
-    bottom: calc(100% - 8px);
+    bottom: calc(100% + 4px);
 }
 
 .subpf-section {
@@ -836,4 +904,129 @@
     .mobile-tree-current {
         text-align: center;
     }
+}
+
+// 13-3 Maturity segment indicator — 5 small filled/empty blocks ---------------
+.maturity-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.maturity-indicator {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.mat-seg {
+    width: 16px;
+    height: 9px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+// Each block is its own tooltip anchor (.prov-cell); keep the help cursor subtle.
+.mat-seg.prov-cell {
+    cursor: help;
+}
+
+// Maturity tooltips sit mid-right in the table; anchor them to the right edge of the
+// block/label so the box opens leftward and never clips the viewport's right edge.
+.mat-seg.prov-cell::after,
+.mat-label.prov-cell::after {
+    left: auto;
+    right: 0;
+}
+
+.mat-seg.mat-filled {
+    background: var(--green);
+}
+
+.mat-label {
+    margin-left: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    vertical-align: middle;
+}
+
+// 11-1 risk roll-up badges + top-risks panel ---------------------------------
+.subpf-rollup {
+    display: inline-flex;
+    gap: 6px;
+    margin-left: auto;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.pf-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--grey-bg);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.pf-badge-warn {
+    background: var(--amber-bg);
+    color: var(--amber);
+}
+
+.pf-risk-panel {
+    margin-bottom: 16px;
+    padding: 16px 20px;
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.pf-risk-cols {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.pf-risk-col {
+    flex: 1;
+    min-width: 240px;
+}
+
+.pf-risk-col h4 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.pf-risk-note {
+    margin: 0 0 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.8;
+}
+
+.pf-risk-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    cursor: pointer;
+    border-bottom: 1px solid var(--grey-bg);
+}
+
+.pf-risk-row:hover {
+    background: var(--bg);
+}
+
+.pf-risk-name {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.pf-risk-meta {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-secondary);
 }

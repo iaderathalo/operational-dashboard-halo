@@ -37,15 +37,15 @@
     },
     "private": true,
     "dependencies": {
-        "@angular/animations": "20.3.18",
-        "@angular/common": "20.3.18",
-        "@angular/compiler": "20.3.18",
-        "@angular/core": "20.3.18",
-        "@angular/forms": "20.3.18",
-        "@angular/platform-browser": "20.3.18",
-        "@angular/platform-browser-dynamic": "20.3.18",
-        "@angular/router": "20.3.18",
-        "@angular/service-worker": "20.3.18",
+        "@angular/animations": "20.3.25",
+        "@angular/common": "20.3.25",
+        "@angular/compiler": "20.3.25",
+        "@angular/core": "20.3.25",
+        "@angular/forms": "20.3.25",
+        "@angular/platform-browser": "20.3.25",
+        "@angular/platform-browser-dynamic": "20.3.25",
+        "@angular/router": "20.3.25",
+        "@angular/service-worker": "20.3.25",
         "@jest/globals": "30.1.2",
         "@mmctech-artifactory/polaris-logger": "5.7.50",
         "@mmctech/micro-lenai-webcomponent": "^1.1.217",
@@ -83,13 +83,13 @@
         "zone.js": "0.15.1"
     },
     "devDependencies": {
-        "@angular-devkit/build-angular": "20.3.20",
+        "@angular-devkit/build-angular": "20.3.25",
         "@angular-eslint/eslint-plugin": "20.3.0",
         "@angular-eslint/eslint-plugin-template": "20.3.0",
         "@angular-eslint/template-parser": "20.3.0",
-        "@angular/cli": "~20.3.13",
-        "@angular/compiler-cli": "20.3.18",
-        "@angular/language-service": "20.3.18",
+        "@angular/cli": "~20.3.25",
+        "@angular/compiler-cli": "20.3.25",
+        "@angular/language-service": "20.3.25",
         "@babel/preset-env": "^7.27.1",
         "@eslint/compat": "1.3.2",
         "@eslint/eslintrc": "3.3.1",
@@ -144,6 +144,8 @@
         "shell-quote": "1.8.4",
         "@babel/runtime": "7.26.10",
         "axios": "1.15.2",
-        "serialize-error": "8.1.0"
+        "serialize-error": "8.1.0",
+        "undici": "6.27.0",
+        "qs": "6.15.2"
     }
 }

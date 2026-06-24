@@ -7,11 +7,15 @@ import {
     DatadogMonitorState,
     DatadogSloSummary,
     DatadogSnapshot,
+    DatadogSyntheticCheck,
 } from './datadog.types';
 import SEED_APPLICATIONS from '../applications/seed/applications.seed';
 
 /** Tag key this mock org carries the CAST key / shortCode on (mirrors the real org). */
 const APP_SHORT_KEY = 'app_short_key';
+
+/** Worst monitor state by deterministic bucket: 0 OK, 1 Warn, 2 Alert, 3 No Data. */
+const WORST_STATE_BY_BUCKET: DatadogMonitorState[] = ['OK', 'Warn', 'Alert', 'No Data'];
 
 /**
  * Deterministic, offline stand-in for Datadog, used when no DATADOG_API_KEY is set.
@@ -50,6 +54,7 @@ export default class MockDatadogClient implements DatadogClient {
 
         const monitors: DatadogMonitor[] = [];
         const sloByTag = new Map<string, DatadogSloSummary>();
+        const syntheticsByTag = new Map<string, DatadogSyntheticCheck[]>();
 
         keys.forEach((key) => {
             monitors.push(...MockDatadogClient.monitorsFor(key));
@@ -57,11 +62,16 @@ export default class MockDatadogClient implements DatadogClient {
             if (slo) {
                 sloByTag.set(`${APP_SHORT_KEY}:${key}`.toLowerCase(), slo);
             }
+            const synthetics = MockDatadogClient.syntheticsFor(key);
+            if (synthetics.length) {
+                syntheticsByTag.set(`${APP_SHORT_KEY}:${key}`.toLowerCase(), synthetics);
+            }
         });
 
         return new InMemoryDatadogSnapshot(
             InMemoryDatadogSnapshot.indexMonitors(monitors),
-            sloByTag
+            sloByTag,
+            syntheticsByTag
         );
     }
 
@@ -90,9 +100,7 @@ export default class MockDatadogClient implements DatadogClient {
     private static monitorsFor(key: string): DatadogMonitor[] {
         const seed = MockDatadogClient.hash(key);
         const bucket = seed % 4; // 0 OK, 1 Warn, 2 Alert, 3 No Data
-        const worst: DatadogMonitorState =
-            // eslint-disable-next-line no-nested-ternary
-            bucket === 1 ? 'Warn' : bucket === 2 ? 'Alert' : bucket === 3 ? 'No Data' : 'OK';
+        const worst: DatadogMonitorState = WORST_STATE_BY_BUCKET[bucket] ?? 'OK';
         const count = 2 + (seed % 3); // 2-4 monitors
         // Deterministic last-change timestamp (no wall clock) so the breakdown is stable.
         const modified = new Date((1_700_000_000 + seed) * 1000).toISOString();
@@ -133,6 +141,27 @@ export default class MockDatadogClient implements DatadogClient {
             uptime7d: Math.min(100, Number((uptime30d + 0.1).toFixed(2))),
             uptime30d,
         };
+    }
+
+    /**
+     * Deterministic 0-2 Synthetic checks for a key, tagged `app_short_key:<key>` so the
+     * resolver finds them. ~1 in 3 keys has none (no synthetic coverage), mirroring that
+     * not every app has synthetic tests.
+     * @param {string} key - the app_short_key value
+     * @returns {DatadogSyntheticCheck[]} the canned synthetic checks (possibly empty)
+     */
+    private static syntheticsFor(key: string): DatadogSyntheticCheck[] {
+        const seed = MockDatadogClient.hash(key);
+        const count = seed % 3; // 0-2 synthetic checks
+        const paused = seed % 4 === 0;
+        return Array.from({ length: count }, (_, i) => ({
+            publicId: `mock-syn-${seed}-${i}`,
+            name: `${key} synthetic ${i + 1}`,
+            type: i % 2 === 0 ? 'browser' : 'api',
+            status: paused ? 'paused' : 'live',
+            // Paused tests have no window data -> null, never a misleading 0% (two-state model).
+            uptime: paused ? null : Number((99 + (seed % 100) / 100).toFixed(2)),
+        }));
     }
 
     /**

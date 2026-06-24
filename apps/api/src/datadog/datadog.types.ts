@@ -39,6 +39,23 @@ export interface DatadogSloSummary {
 }
 
 /**
+ * One Datadog Synthetic test resolved for an Application (12-4 Health Check Breakdown).
+ * Synthetic tests carry our `app_short_key:` / `app_service_id:` tags (~98.6% coverage,
+ * unlike APM trace metrics), so they join exactly like monitors and SLOs. Carries the
+ * test's identity, lifecycle status, and 30-day uptime.
+ */
+export interface DatadogSyntheticCheck {
+    publicId: string;
+    name: string;
+    /** Test kind: `api` | `browser` | `mobile`. */
+    type: string;
+    /** Lifecycle: `live` | `paused`. */
+    status: string;
+    /** 30-day synthetic uptime %, or null when the window has no data (paused / errored). */
+    uptime: number | null;
+}
+
+/**
  * Canonical, case-insensitive key for the snapshot tag index: `${tagKey}:${tagValue}`
  * lowercased. A Datadog tag string `app_short_key:IntelliFi` and a resolver lookup
  * for ('app_short_key', 'intellifi') must collapse to the same bucket, so both the
@@ -77,4 +94,14 @@ export interface DatadogSnapshot {
      * @returns {DatadogSloSummary | null} the SLO summary, or null when unmatched
      */
     sloSummaryForTag(tagKey: string, tagValue: string): DatadogSloSummary | null;
+
+    /**
+     * The Synthetic tests carrying the given `${tagKey}:${tagValue}` (case-insensitive),
+     * or [] when none. Kept tests were filtered to app_short_key/app_service_id and
+     * indexed during the bulk fetch. Returns a copy; never throws.
+     * @param {string} tagKey - tag key to match (e.g. `app_short_key`)
+     * @param {string} tagValue - tag value to match (e.g. the app's CAST key)
+     * @returns {DatadogSyntheticCheck[]} the matching synthetic checks (possibly empty)
+     */
+    syntheticsForTag(tagKey: string, tagValue: string): DatadogSyntheticCheck[];
 }

@@ -644,6 +644,51 @@
     color: var(--text2);
 }
 
+// 12-4 Health Check Breakdown — synthetic uptime tone, paused badge, empty state.
+.health-check-row.hc-warn {
+    background: var(--amber-bg);
+}
+
+.health-check-row.hc-nodata {
+    opacity: 0.65;
+}
+
+.hc-warn .hc-icon.pass {
+    background: var(--amber-bg);
+    color: var(--amber);
+}
+
+.hc-good .hc-time,
+.hc-warn .hc-time {
+    font-weight: 600;
+}
+
+.hc-good .hc-time {
+    color: var(--green);
+}
+
+.hc-warn .hc-time {
+    color: var(--amber);
+}
+
+.hc-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text2);
+    background: var(--grey-bg);
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+
+.health-check-empty {
+    font-size: 13px;
+    color: var(--text2);
+    padding: 10px;
+    text-align: center;
+}
+
 .monitor-row {
     display: flex;
     align-items: flex-start;
@@ -751,25 +796,27 @@
     background: var(--grey);
 }
 
-// Instant provenance tooltip (matches the dashboard table — no native-title delay).
+// Instant provenance tooltip. max-width + white-space: pre-line keeps multi-line copy
+// readable. z-index 9999 escapes any overflow:hidden ancestor so it is never clipped.
 .src-dot::after {
     content: attr(data-tip);
     position: absolute;
-    left: 50%;
+    left: 0;
     top: calc(100% + 7px);
-    transform: translateX(-50%);
-    z-index: 30;
-    padding: 5px 9px;
+    z-index: 9999;
+    padding: 6px 10px;
     border-radius: 6px;
     background: var(--text);
     color: #fff;
     font-size: 11px;
     font-weight: 500;
-    line-height: 1.3;
+    line-height: 1.4;
     letter-spacing: normal;
     text-transform: none;
-    white-space: nowrap;
-    box-shadow: var(--shadow);
+    white-space: pre-line;
+    width: max-content;
+    max-width: 260px;
+    box-shadow: 0 4px 12px rgba(26, 39, 68, 0.18);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.1s ease;
@@ -781,7 +828,7 @@
 
 .activity-item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
@@ -795,7 +842,6 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    margin-top: 6px;
     flex-shrink: 0;
 }
 
@@ -822,7 +868,9 @@
 .activity-time {
     font-size: 11px;
     color: var(--grey);
-    min-width: 52px;
+    min-width: 92px;
+    flex-shrink: 0;
+    white-space: nowrap;
     font-family: 'SF Mono', Monaco, monospace;
 }
 
@@ -2255,5 +2303,135 @@
         left: 12px;
         right: 12px;
         bottom: 12px;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 12-x Recommendations tab — minimal additions; chips/cards/expanders reuse the
+// incident disclosure primitives (.inc-card.elevated, .inc-expand, .inc-details).
+// ---------------------------------------------------------------------------
+
+.rec-ring-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.rec-ring {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 3px solid currentColor;
+}
+
+.ring-good {
+    color: var(--green);
+}
+
+.ring-warn {
+    color: var(--amber);
+}
+
+.ring-risk {
+    color: var(--red);
+}
+
+.rec-score {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.rec-provenance {
+    margin-top: 10px;
+}
+
+.rec-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.status-pill.grey {
+    background: var(--grey-bg);
+    color: var(--grey);
+}
+
+.t-green {
+    color: var(--green);
+}
+
+.t-amber {
+    color: var(--amber);
+}
+
+.rec-action {
+    margin-bottom: 12px;
+}
+
+.rec-text {
+    font-size: 12px;
+    color: var(--text2);
+    margin: 0 0 6px;
+}
+
+.rec-steps {
+    font-size: 12px;
+    color: var(--text2);
+    margin: 0 0 6px;
+    padding-left: 18px;
+
+    li {
+        margin-bottom: 4px;
+    }
+}
+
+.rec-all-passing {
+    border-color: var(--green);
+    color: var(--green);
+    font-weight: 600;
+}
+
+.rec-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-color: var(--red);
+    color: var(--red);
+}
+
+.rec-empty {
+    color: var(--text2);
+}
+
+.rec-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rec-skeleton-row {
+    height: 28px;
+    border-radius: var(--r);
+    background: linear-gradient(90deg, var(--grey-bg) 25%, var(--bg) 37%, var(--grey-bg) 63%);
+    background-size: 400% 100%;
+    animation: rec-shimmer 1.4s ease infinite;
+}
+
+.rec-button-row {
+    padding-top: 12px;
+}
+
+@keyframes rec-shimmer {
+    0% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0 50%;
     }
 }

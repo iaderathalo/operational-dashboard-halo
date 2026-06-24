@@ -1,11 +1,16 @@
 import { Logger } from '@mmctech-artifactory/polaris-logger';
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 
 import { Application } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import { DatadogClient } from './datadog-client';
-import { DatadogMonitor, DatadogSloSummary, DatadogSnapshot } from './datadog.types';
-import { buildHealth, buildMonitorBreakdown } from './health-rollup';
+import {
+    DatadogMonitor,
+    DatadogSloSummary,
+    DatadogSnapshot,
+    DatadogSyntheticCheck,
+} from './datadog.types';
+import { buildHealth, buildMonitorBreakdown, buildSyntheticBreakdown } from './health-rollup';
 import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
 
@@ -19,17 +24,20 @@ export interface SyncSummary {
 interface Resolution {
     monitors: DatadogMonitor[];
     slo: DatadogSloSummary | null;
+    synthetics: DatadogSyntheticCheck[];
     resolutionPath: 'primary' | 'fallback' | 'unmapped';
 }
 
 @Injectable()
 export default class DatadogSyncService {
+    /** In-flight guard — true while a background syncAll() run is executing. */
+    private syncing = false;
+
     /**
-     *
-     * @param datadog
-     * @param snapshots
-     * @param applicationsService
-     * @param logger
+     * @param datadog - Datadog HTTP client
+     * @param snapshots - health-snapshot repository
+     * @param applicationsService - application persistence service
+     * @param logger - structured logger
      */
     constructor(
         @Inject('DatadogClient') private readonly datadog: DatadogClient,
@@ -37,6 +45,53 @@ export default class DatadogSyncService {
         private readonly applicationsService: ApplicationsService,
         private readonly logger: Logger
     ) {}
+
+    /**
+     * Fire-and-forget entry point used by the controller. Returns immediately after
+     * dispatching {@link syncAll} in the background. Throws {@link ConflictException}
+     * (HTTP 409) when a run is already in progress so that a concurrent caller is
+     * rejected rather than starting a duplicate.
+     *
+     * The in-flight flag is always cleared via {@code .finally} so a failed run does
+     * not permanently wedge the endpoint.
+     * @returns {void}
+     */
+    triggerSync(): void {
+        if (this.syncing) {
+            this.logger.warn(
+                'Datadog sync [rejected] — a run is already in progress; concurrent trigger dropped'
+            );
+            throw new ConflictException('A Datadog sync is already in progress');
+        }
+
+        this.syncing = true;
+        const startedAt = Date.now();
+        this.logger.info('Datadog sync [started] — background run dispatched');
+
+        this.syncAll()
+            .then((summary) => {
+                const durationMs = Date.now() - startedAt;
+                this.logger.info('Datadog sync [completed]', {
+                    appsAttempted: summary.appsAttempted,
+                    appsSucceeded: summary.appsSucceeded,
+                    appsFailed: summary.appsFailed,
+                    durationMs,
+                });
+            })
+            .catch((err: unknown) => {
+                const durationMs = Date.now() - startedAt;
+                const message = err instanceof Error ? err.message : String(err);
+                const stack = err instanceof Error ? err.stack : undefined;
+                this.logger.error('Datadog sync [failed] — fatal run error', {
+                    message,
+                    stack,
+                    elapsedMs: durationMs,
+                });
+            })
+            .finally(() => {
+                this.syncing = false;
+            });
+    }
 
     /**
      * Pull telemetry for every Application, compute Health, and persist it.
@@ -131,13 +186,17 @@ export default class DatadogSyncService {
      * @returns {Promise<void>}
      */
     private async syncOne(app: Application, snapshot: DatadogSnapshot): Promise<void> {
-        const { monitors, slo, resolutionPath } = DatadogSyncService.resolve(app, snapshot);
+        const { monitors, slo, synthetics, resolutionPath } = DatadogSyncService.resolve(
+            app,
+            snapshot
+        );
         const health = buildHealth(monitors, slo, resolutionPath);
         const now = new Date().toISOString();
 
         await this.applicationsService.applyHealthUpdate(app, {
             ...health,
             monitors: buildMonitorBreakdown(monitors),
+            syntheticChecks: buildSyntheticBreakdown(synthetics),
             lastSyncAt: now,
             lastSyncStatus: resolutionPath === 'unmapped' ? 'unmapped' : 'ok',
         });
@@ -172,6 +231,7 @@ export default class DatadogSyncService {
                 return {
                     monitors,
                     slo: snapshot.sloSummaryForTag('app_short_key', shortKey),
+                    synthetics: snapshot.syntheticsForTag('app_short_key', shortKey) ?? [],
                     resolutionPath: 'primary',
                 };
             }
@@ -182,10 +242,12 @@ export default class DatadogSyncService {
                 return {
                     monitors,
                     slo: snapshot.sloSummaryForTag('app_service_id', app.serviceNowKey),
+                    synthetics:
+                        snapshot.syntheticsForTag('app_service_id', app.serviceNowKey) ?? [],
                     resolutionPath: 'fallback',
                 };
             }
         }
-        return { monitors: [], slo: null, resolutionPath: 'unmapped' };
+        return { monitors: [], slo: null, synthetics: [], resolutionPath: 'unmapped' };
     }
 }

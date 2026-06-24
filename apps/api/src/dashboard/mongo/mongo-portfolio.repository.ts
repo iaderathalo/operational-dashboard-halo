@@ -1,35 +1,70 @@
+/* eslint-disable max-lines */
 import { Logger } from '@mmctech-artifactory/polaris-logger';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ObjectId } from 'mongodb';
 
-import { DashboardDetailResponse } from '@operational-dashboard/shared-api-model/model/dashboard';
+import {
+    DashboardDetailResponse,
+    DigestSummary,
+    PortfolioRollup,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import MongoRepository from '../../repository/mongo/mongo-repository';
-import { PortfolioAppContext, PortfolioNode } from '../portfolio.model';
+import { PortfolioAppContext, PortfolioNode, PortfolioNodeRollup } from '../portfolio.model';
 import { PortfolioRepository } from '../portfolio.repository';
 import { StoredApplication } from './mongo-portfolio.types';
+import { PortfolioBuilderUtility } from './portfolio-builder.utility';
 import createDashboardDetailResponse from '../seed/detail.seed';
 
-const findAppContext = (
-    appId: string,
-    node: PortfolioNode,
-    path: PortfolioNode[] = []
-): PortfolioAppContext | null => {
-    const matchingApp = (node.apps || []).find((app) => app.id === appId);
+/** Fields needed for the portfolio tree build (excludes large arrays for per-app detail). */
+const PORTFOLIO_PROJECTION = {
+    _id: 1,
+    name: 1,
+    opCo: 1,
+    businessDeliveryPortfolio: 1,
+    businessUnit: 1,
+    active: 1,
+    datadogMapped: 1,
+    healthStatus: 1,
+    uptime30d: 1,
+    slaTarget: 1,
+    errorBudgetRemainingPct: 1,
+    resolutionPath: 1,
+    lastSyncStatus: 1,
+    lastSyncAt: 1,
+    monitors: 1,
+    syntheticChecks: 1,
+    currentUserCount: 1,
+    internalUserCount: 1,
+    externalUserCount: 1,
+    itOwner: 1,
+    itOwnerEmail: 1,
+    portfolioOwnerName: 1,
+    portfolioOwnerEmail: 1,
+    businessOwner: 1,
+    businessOwnerEmail: 1,
+    technicalContact: 1,
+    technicalContactEmail: 1,
+    podName: 1,
+    podLead: 1,
+    podLeadEmail: 1,
+    amsServiceStatusMaintenance: 1,
+    amsServiceStatusApplicationEngineering: 1,
+    amsServiceStatusApplicationSupport: 1,
+    amsServiceStatusDatabaseServices: 1,
+    amsServiceStatusItControls: 1,
+} as const;
 
-    if (matchingApp) {
-        return {
-            app: matchingApp,
-            path: [...path, node],
-        };
-    }
+/** Cache entry for a built portfolio tree. */
+interface PortfolioCacheEntry {
+    tree: PortfolioNode;
+    maxSyncAt: string | null;
+    createdAt: number;
+}
 
-    return (
-        (node.children || [])
-            .map((child) => findAppContext(appId, child, [...path, node]))
-            .find((context): context is PortfolioAppContext => context !== null) || null
-    );
-};
+/** Default TTL for the portfolio cache (60 seconds). */
+const CACHE_TTL_MS = 60_000;
 
 @Injectable()
 export default class MongoPortfolioRepository
@@ -40,6 +75,9 @@ export default class MongoPortfolioRepository
 
     /** Operating-company allowlist (lowercased) from PORTFOLIO_OPCO_ALLOWLIST; empty = all OpCos. */
     private readonly opCoAllowlist: string[];
+
+    /** In-memory cache keyed by scope (undefined → '__all__', email → lowercased email). */
+    private readonly portfolioCache = new Map<string, PortfolioCacheEntry>();
 
     /**
      * Creates the Mongo-backed portfolio repository.
@@ -63,26 +101,71 @@ export default class MongoPortfolioRepository
      * @returns {Promise<object>} dashboard portfolio tree
      */
     async getPortfolio(userEmail?: string): Promise<PortfolioNode> {
+        const cacheKey = MongoPortfolioRepository.cacheKey(userEmail);
+        const cached = this.portfolioCache.get(cacheKey);
+
+        if (cached && Date.now() - cached.createdAt < CACHE_TTL_MS) {
+            const currentMax = await this.getMaxSyncAt(userEmail);
+            if (currentMax === cached.maxSyncAt) {
+                return cached.tree;
+            }
+        }
+
+        const applications = await this.getApplications(userEmail);
+        const tree = MongoPortfolioRepository.buildPortfolio(
+            applications,
+            userEmail,
+            this.opCoAllowlist
+        );
+
+        const maxSyncAt =
+            applications
+                .map((a) => a.lastSyncAt || null)
+                .filter((v): v is string => Boolean(v))
+                .sort()
+                .pop() || null;
+
+        this.portfolioCache.set(cacheKey, { tree, maxSyncAt, createdAt: Date.now() });
+
+        return tree;
+    }
+
+    /**
+     * Builds the executive weekly digest from already-stored data — NO new Datadog
+     * call (11-4). Reads the same scoped set the portfolio uses and derives the
+     * leadership roll-up (reusing 11-1's computeRollup) plus a freshness stamp on read,
+     * exactly as 7-2 derives maturity. Week-over-week movers need a prior period that
+     * does not exist yet, so the digest honestly degrades to a point-in-time snapshot
+     * (priorPeriod=null, empty movers).
+     * @param {string} [userEmail] - optional email used to scope the digest to owned apps
+     * @returns {Promise<object>} the derived digest summary
+     */
+    async getDigest(userEmail?: string): Promise<DigestSummary> {
         const applications = await this.getApplications(userEmail);
 
-        return MongoPortfolioRepository.buildPortfolio(applications, userEmail, this.opCoAllowlist);
+        return MongoPortfolioRepository.buildDigest(applications, userEmail);
     }
 
     /**
      * Returns the detail context for a single application from the stored portfolio.
+     * Uses a single-document lookup instead of loading the full collection.
      * @param {string} appId - portfolio application id
      * @param {string} [userEmail] - optional email used to scope the portfolio to owned applications
      * @returns {Promise<object | null>} application context when found
      */
     async getAppContext(appId: string, userEmail?: string): Promise<PortfolioAppContext | null> {
-        const portfolio = await this.getPortfolio(userEmail);
+        const application = await this.getApplicationById(appId, userEmail);
 
-        return findAppContext(appId, portfolio);
+        if (!application) {
+            return null;
+        }
+
+        return MongoPortfolioRepository.buildSingleAppContext(application, this.opCoAllowlist);
     }
 
     /**
      * Returns the stored detail payload for a single application.
-     * Missing detail documents are generated once and persisted.
+     * Uses a single-document lookup instead of loading the full collection.
      * @param {string} appId - portfolio application id
      * @param {string} [userEmail] - optional email used to scope the portfolio to owned applications
      * @returns {Promise<object | null>} application detail payload when found
@@ -98,20 +181,72 @@ export default class MongoPortfolioRepository
     }
 
     /**
-     * Ensures the dashboard portfolio collection exists and has seed data.
+     * Ensures the dashboard portfolio collection exists and creates indexes.
      * @returns {Promise<void>}
      */
     async initDb() {
         this.logger.info('Mongo portfolio repository initialized for real application data');
+
+        const collection = await this.getCollection<StoredApplication>(
+            this.applicationsCollectionName
+        );
+
+        await Promise.all([
+            collection.createIndex({ active: 1 }),
+            collection.createIndex(
+                { itOwnerEmail: 1 },
+                { collation: { locale: 'en', strength: 2 } }
+            ),
+            collection.createIndex(
+                { portfolioOwnerEmail: 1 },
+                { collation: { locale: 'en', strength: 2 } }
+            ),
+            collection.createIndex({ active: 1, opCo: 1 }),
+        ]);
+
+        this.logger.info('MongoDB indexes ensured for applications collection');
+    }
+
+    /** Invalidates the portfolio cache for all scopes. */
+    invalidateCache(): void {
+        this.portfolioCache.clear();
+    }
+
+    /**
+     * Fetches a single application by its _id, applying owner-scope if needed.
+     * @param {string} appId - the string representation of the MongoDB _id
+     * @param {string} [userEmail] - optional email used to filter owned applications
+     * @returns {Promise<object | null>} the matching application document or null
+     */
+    private async getApplicationById(
+        appId: string,
+        userEmail?: string
+    ): Promise<StoredApplication | null> {
+        const query: Record<string, unknown> = {
+            _id: ObjectId.isValid(appId) ? new ObjectId(appId) : appId,
+            active: { $ne: false },
+        };
+
+        if (userEmail) {
+            query.$or = [
+                { itOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+                { portfolioOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+            ];
+        }
+
+        return (
+            await this.getCollection<StoredApplication>(this.applicationsCollectionName)
+        ).findOne(query);
     }
 
     /**
      * Loads applications from MongoDB, optionally scoped to a specific user.
+     * Uses projection to avoid loading unnecessary fields.
      * @param {string} [userEmail] - optional email used to filter owned applications
      * @returns {Promise<object[]>} stored applications matching the query
      */
     private async getApplications(userEmail?: string): Promise<StoredApplication[]> {
-        const query: Record<string, unknown> = {};
+        const query: Record<string, unknown> = { active: { $ne: false } };
 
         if (userEmail) {
             query.$or = [
@@ -121,8 +256,101 @@ export default class MongoPortfolioRepository
         }
 
         return (await this.getCollection<StoredApplication>(this.applicationsCollectionName))
-            .find(query)
+            .find(query, { projection: PORTFOLIO_PROJECTION })
             .toArray();
+    }
+
+    /**
+     * Returns the max lastSyncAt value for the scoped set (cheap aggregation for cache check).
+     * @param {string} [userEmail] - optional email used to filter owned applications
+     * @returns {Promise<string | null>} the latest lastSyncAt or null
+     */
+    private async getMaxSyncAt(userEmail?: string): Promise<string | null> {
+        const query: Record<string, unknown> = { active: { $ne: false } };
+
+        if (userEmail) {
+            query.$or = [
+                { itOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+                { portfolioOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+            ];
+        }
+
+        const result = await (
+            await this.getCollection<StoredApplication>(this.applicationsCollectionName)
+        )
+            .find(query, { projection: { lastSyncAt: 1 }, sort: { lastSyncAt: -1 }, limit: 1 })
+            .toArray();
+
+        return result[0]?.lastSyncAt || null;
+    }
+
+    /**
+     * Builds the PortfolioAppContext for a single application without loading the full tree.
+     * Reconstructs just the hierarchy path (root → OpCo → BU → LOB) for the one app.
+     * @param {object} application - the stored application document
+     * @param {string[]} opCoAllowlist - lowercased OpCo allowlist
+     * @returns {object | null} the app context with path, or null if filtered by allowlist
+     */
+    private static buildSingleAppContext(
+        application: StoredApplication,
+        opCoAllowlist: string[]
+    ): PortfolioAppContext | null {
+        const opCo = PortfolioBuilderUtility.opCoOf(application);
+
+        // If OpCo allowlist is active and this app's OpCo isn't in it, treat as not found.
+        if (opCoAllowlist.length && !opCoAllowlist.includes(opCo.toLowerCase())) {
+            return null;
+        }
+
+        const businessUnit = PortfolioBuilderUtility.businessUnitOf(application);
+        const lob = PortfolioBuilderUtility.lobOf(application);
+        const portfolioApp = MongoPortfolioRepository.toPortfolioApp(application);
+
+        const lobNode: PortfolioNode = {
+            id: `lob-${PortfolioBuilderUtility.slugify(`${opCo}-${businessUnit}-${lob}`)}`,
+            name: lob,
+            role: 'LOB',
+            owner: application.itOwner || lob,
+            children: [],
+            apps: [portfolioApp],
+        };
+
+        const buNode: PortfolioNode = {
+            id: `business-unit-${PortfolioBuilderUtility.slugify(`${opCo}-${businessUnit}`)}`,
+            name: businessUnit,
+            role: 'Business Unit',
+            owner: application.portfolioOwnerName || businessUnit,
+            children: [lobNode],
+            apps: [],
+        };
+
+        const opCoNode: PortfolioNode = {
+            id: `opco-${PortfolioBuilderUtility.slugify(opCo)}`,
+            name: opCo,
+            role: 'Operating Company',
+            owner: application.portfolioOwnerName || opCo,
+            children: [buNode],
+            apps: [],
+        };
+
+        const root: PortfolioNode = {
+            id: 'application-portfolio',
+            name: 'Application Portfolio',
+            role: 'Portfolio',
+            owner: 'All Applications',
+            children: [opCoNode],
+            apps: [],
+        };
+
+        return { app: portfolioApp, path: [root, opCoNode, buNode, lobNode] };
+    }
+
+    /**
+     * Returns the cache key for a given scope.
+     * @param userEmail
+     */
+    private static cacheKey(userEmail?: string): string {
+        return userEmail ? userEmail.toLowerCase() : '__all__';
     }
 
     /**
@@ -145,12 +373,12 @@ export default class MongoPortfolioRepository
         // (e.g. "Mercer" for now). Empty allowlist = all OpCos. Configurable via config (redeploy to change).
         const scoped = opCoAllowlist.length
             ? applications.filter((application) =>
-                  opCoAllowlist.includes(MongoPortfolioRepository.opCoOf(application).toLowerCase())
+                  opCoAllowlist.includes(PortfolioBuilderUtility.opCoOf(application).toLowerCase())
               )
             : applications;
 
-        const opCoMap = MongoPortfolioRepository.groupApplications(scoped, (application) =>
-            MongoPortfolioRepository.opCoOf(application)
+        const opCoMap = PortfolioBuilderUtility.groupApplications(scoped, (application) =>
+            PortfolioBuilderUtility.opCoOf(application)
         );
 
         const children = [...opCoMap.entries()]
@@ -163,6 +391,7 @@ export default class MongoPortfolioRepository
             role: 'Portfolio',
             owner: userEmail || 'All Applications',
             children,
+            rollup: MongoPortfolioRepository.computeRollup(scoped),
             apps: [],
         };
     }
@@ -173,88 +402,6 @@ export default class MongoPortfolioRepository
      * @param {object} application - stored application document
      * @returns {string} operating company name
      */
-    private static opCoOf(application: StoredApplication): string {
-        return (application.opCo || 'Unassigned').trim() || 'Unassigned';
-    }
-
-    /**
-     * Resolves the business unit (line) for an application: the part of the
-     * delivery-portfolio name before " - ".
-     * @param {object} application - stored application document
-     * @returns {string} business-unit label
-     */
-    private static businessUnitOf(application: StoredApplication): string {
-        const p = (
-            application.businessDeliveryPortfolio ||
-            application.businessUnit ||
-            'Unassigned'
-        ).trim();
-        const i = p.indexOf(' - ');
-        return (i === -1 ? p : p.slice(0, i).trim()) || 'Unassigned';
-    }
-
-    /**
-     * Resolves the LOB for an application (part after " - "), or "General".
-     * @param {object} application - stored application document
-     * @returns {string} LOB label
-     */
-    private static lobOf(application: StoredApplication): string {
-        const p = (
-            application.businessDeliveryPortfolio ||
-            application.businessUnit ||
-            'Unassigned'
-        ).trim();
-        const i = p.indexOf(' - ');
-        return i === -1 ? 'General' : p.slice(i + 3).trim();
-    }
-
-    /**
-     * Returns the most common non-empty value produced by the selector, or the fallback.
-     * @param {object[]} applications - applications in the group
-     * @param {Function} selector - derives a candidate label from an application
-     * @param {string} fallback - value used when no candidate is present
-     * @returns {string} most frequent label or the fallback
-     */
-    private static mostCommon(
-        applications: StoredApplication[],
-        selector: (application: StoredApplication) => string | null | undefined,
-        fallback: string
-    ): string {
-        const counts = applications.reduce((map, app) => {
-            const v = (selector(app) || '').trim();
-            if (v) map.set(v, (map.get(v) || 0) + 1);
-            return map;
-        }, new Map<string, number>());
-        let best = fallback;
-        let bestCount = 0;
-        counts.forEach((n, v) => {
-            if (n > bestCount) {
-                best = v;
-                bestCount = n;
-            }
-        });
-        return best;
-    }
-
-    /**
-     * Groups applications by a derived key.
-     * @param {object[]} applications - applications to group
-     * @param {Function} keySelector - function used to derive the grouping key
-     * @returns {Map<string, object[]>} applications grouped by the selected key
-     */
-    private static groupApplications(
-        applications: StoredApplication[],
-        keySelector: (application: StoredApplication) => string
-    ): Map<string, StoredApplication[]> {
-        return applications.reduce((map, app) => {
-            const key = keySelector(app);
-            const bucket = map.get(key) || [];
-            bucket.push(app);
-            map.set(key, bucket);
-            return map;
-        }, new Map<string, StoredApplication[]>());
-    }
-
     /**
      * Builds an operating-company node and its business-unit children.
      * @param {string} opCo - operating company name
@@ -262,9 +409,8 @@ export default class MongoPortfolioRepository
      * @returns {object} operating-company node
      */
     private static buildOpCoNode(opCo: string, opCoApps: StoredApplication[]): PortfolioNode {
-        const businessUnitMap = MongoPortfolioRepository.groupApplications(
-            opCoApps,
-            (application) => MongoPortfolioRepository.businessUnitOf(application)
+        const businessUnitMap = PortfolioBuilderUtility.groupApplications(opCoApps, (application) =>
+            PortfolioBuilderUtility.businessUnitOf(application)
         );
 
         const children = [...businessUnitMap.entries()]
@@ -274,15 +420,16 @@ export default class MongoPortfolioRepository
             );
 
         return {
-            id: `opco-${MongoPortfolioRepository.slugify(opCo)}`,
+            id: `opco-${PortfolioBuilderUtility.slugify(opCo)}`,
             name: opCo,
             role: 'Operating Company',
-            owner: MongoPortfolioRepository.mostCommon(
+            owner: PortfolioBuilderUtility.mostCommon(
                 opCoApps,
                 (application) => application.portfolioOwnerName,
                 opCo
             ),
             children,
+            rollup: MongoPortfolioRepository.computeRollup(opCoApps),
             apps: [],
         };
     }
@@ -299,10 +446,9 @@ export default class MongoPortfolioRepository
         businessUnit: string,
         businessUnitApps: StoredApplication[]
     ): PortfolioNode {
-        const lobMap = MongoPortfolioRepository.groupApplications(businessUnitApps, (application) =>
-            MongoPortfolioRepository.lobOf(application)
+        const lobMap = PortfolioBuilderUtility.groupApplications(businessUnitApps, (application) =>
+            PortfolioBuilderUtility.lobOf(application)
         );
-
         const children = [...lobMap.entries()]
             .sort(([left], [right]) => left.localeCompare(right))
             .map(([lob, lobApps]) =>
@@ -310,15 +456,16 @@ export default class MongoPortfolioRepository
             );
 
         return {
-            id: `business-unit-${MongoPortfolioRepository.slugify(`${opCo}-${businessUnit}`)}`,
+            id: `business-unit-${PortfolioBuilderUtility.slugify(`${opCo}-${businessUnit}`)}`,
             name: businessUnit,
             role: 'Business Unit',
-            owner: MongoPortfolioRepository.mostCommon(
+            owner: PortfolioBuilderUtility.mostCommon(
                 businessUnitApps,
                 (application) => application.portfolioOwnerName,
                 businessUnit
             ),
             children,
+            rollup: MongoPortfolioRepository.computeRollup(businessUnitApps),
             apps: [],
         };
     }
@@ -338,15 +485,16 @@ export default class MongoPortfolioRepository
         lobApps: StoredApplication[]
     ): PortfolioNode {
         return {
-            id: `lob-${MongoPortfolioRepository.slugify(`${opCo}-${businessUnit}-${lob}`)}`,
+            id: `lob-${PortfolioBuilderUtility.slugify(`${opCo}-${businessUnit}-${lob}`)}`,
             name: lob,
             role: 'LOB',
-            owner: MongoPortfolioRepository.mostCommon(
+            owner: PortfolioBuilderUtility.mostCommon(
                 lobApps,
                 (application) => application.itOwner,
                 lob
             ),
             children: [],
+            rollup: MongoPortfolioRepository.computeRollup(lobApps),
             apps: lobApps
                 .sort((left, right) => left.name.localeCompare(right.name))
                 .map((application) => MongoPortfolioRepository.toPortfolioApp(application)),
@@ -358,9 +506,9 @@ export default class MongoPortfolioRepository
      * @param {object} application - stored application document
      * @returns {object} portfolio card payload
      */
+    // eslint-disable-next-line max-lines-per-function
     private static toPortfolioApp(application: StoredApplication) {
         const { _id: applicationId } = application;
-
         return {
             id: String(applicationId),
             name: application.name,
@@ -377,7 +525,14 @@ export default class MongoPortfolioRepository
             lastSyncStatus: application.lastSyncStatus ?? null,
             lastSyncAt: application.lastSyncAt ?? null,
             monitors: application.monitors ?? [],
-            maturity: MongoPortfolioRepository.computeMaturity(application),
+            syntheticChecks: (application.syntheticChecks ?? []).map((check) => ({
+                name: check.name,
+                type: check.type,
+                status: check.status,
+                uptime: check.uptime,
+            })),
+            maturity: PortfolioBuilderUtility.computeMaturity(application),
+            burnRate: PortfolioBuilderUtility.computeBurnRate(application),
             users: application.currentUserCount || 0,
             totalInternalUsers: application.internalUserCount || 0,
             totalExternalUsers: application.externalUserCount || 0,
@@ -406,42 +561,93 @@ export default class MongoPortfolioRepository
     }
 
     /**
-     * Derives a per-app observability maturity scorecard from data the sync already brings —
-     * no new Datadog call. Signals: mapped, has-monitor, has-SLO, SLO-passing, has-owner.
-     * @param {object} application - stored application document
-     * @returns {{score: number, max: number, signals: Record<string, boolean>}} maturity payload
+     * 11-1: aggregate risk roll-up over a flat set of stored apps — pure local logic,
+     * no fetch. Computed from each node's full descendant set (every metric is a flat
+     * count/average over leaf apps, so this equals rolling child aggregates upward).
+     * An unmapped app counts against coverage and never inflates the node to a false
+     * GREEN ("never a false GREEN", 5-6). Percentages are null for an empty set so an
+     * empty node never reads as a fabricated 0%.
+     * @param {object[]} applications - descendant applications to aggregate
+     * @returns {object} the aggregate roll-up
      */
-    private static computeMaturity(application: StoredApplication) {
-        const {
-            datadogMapped,
-            monitors,
-            uptime30d,
-            slaTarget,
-            itOwner,
-            portfolioOwnerName,
-            businessOwner,
-        } = application;
-        const signals = {
-            mapped: datadogMapped ?? false,
-            hasMonitor: (monitors?.length ?? 0) > 0,
-            hasSLO: uptime30d != null,
-            sloPassing: uptime30d != null && slaTarget != null && uptime30d >= slaTarget,
-            hasOwner: Boolean(itOwner || portfolioOwnerName || businessOwner),
+    private static computeRollup(applications: StoredApplication[]): PortfolioNodeRollup {
+        const appCount = applications.length;
+        if (appCount === 0) {
+            return {
+                appCount: 0,
+                healthyPct: null,
+                coveragePct: null,
+                sloPassingPct: null,
+                avgMaturity: null,
+                fastBurnCount: 0,
+            };
+        }
+        const pct = (n: number) => Math.round((n / appCount) * 1000) / 10;
+        const mapped = applications.filter((a) => a.datadogMapped === true);
+        const healthy = applications.filter(
+            (a) => a.datadogMapped === true && (a.healthStatus || '').toUpperCase() === 'GREEN'
+        );
+        const sloPassing = applications.filter(
+            (a) => a.uptime30d != null && a.slaTarget != null && a.uptime30d >= a.slaTarget
+        );
+        const maturitySum = applications.reduce(
+            (sum, a) => sum + PortfolioBuilderUtility.computeMaturity(a).score,
+            0
+        );
+        const fastBurnCount = applications.filter((a) => {
+            const { rate } = PortfolioBuilderUtility.computeBurnRate(a);
+            return rate != null && rate >= 1;
+        }).length;
+        return {
+            appCount,
+            healthyPct: pct(healthy.length),
+            coveragePct: pct(mapped.length),
+            sloPassingPct: pct(sloPassing.length),
+            avgMaturity: Math.round((maturitySum / appCount) * 10) / 10,
+            fastBurnCount,
         };
-        const score = Object.values(signals).filter(Boolean).length;
-        return { score, max: Object.keys(signals).length, signals };
     }
 
     /**
-     * Normalizes a label for safe use in portfolio node ids.
-     * @param {string} value - label to normalize
-     * @returns {string} slugified label
+     * 11-4: derives the executive digest from a scoped set of stored apps. Pure
+     * projection, no fetch. Reuses 11-1's computeRollup as the leadership roll-up (no
+     * duplicate aggregation). Stamps a freshness summary so a failed last sync (5-8
+     * egress blocker) is surfaced rather than presented as current. Top movers need a
+     * prior period that is not yet stored, so v1 honestly degrades to a point-in-time
+     * snapshot (priorPeriod=null, empty movers) with a note saying so.
+     * @param {object[]} applications - scoped applications
+     * @param {string} [userEmail] - present when the digest is owner-scoped
+     * @returns {object} the digest summary
      */
-    private static slugify(value: string): string {
-        return value
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+    private static buildDigest(
+        applications: StoredApplication[],
+        userEmail?: string
+    ): DigestSummary {
+        const rollup: PortfolioRollup = MongoPortfolioRepository.computeRollup(applications);
+        const failed = applications.filter((a) => a.lastSyncStatus === 'error');
+        const lastSyncAt =
+            applications
+                .map((a) => a.lastSyncAt || null)
+                .filter((value): value is string => Boolean(value))
+                .sort()
+                .pop() || null;
+        const freshnessOk = failed.length === 0;
+        return {
+            generatedAt: new Date().toISOString(),
+            scope: userEmail ? 'mine' : 'all',
+            rollup,
+            freshness: {
+                ok: freshnessOk,
+                failedCount: failed.length,
+                lastSyncAt,
+                note: freshnessOk
+                    ? null
+                    : `Last sync failed for ${failed.length} app(s) — values may be stale.`,
+            },
+            priorPeriod: null,
+            movers: [],
+            newRisks: [],
+            note: 'No prior period to compare against yet — point-in-time snapshot.',
+        };
     }
 }

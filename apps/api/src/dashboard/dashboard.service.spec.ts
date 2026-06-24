@@ -3,7 +3,10 @@ import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mock, MockProxy } from 'jest-mock-extended';
 
-import { HealthSnapshot } from '@operational-dashboard/shared-api-model/model/dashboard';
+import {
+    DigestSummary,
+    HealthSnapshot,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardService from './dashboard.service';
 import { PortfolioAppContext } from './portfolio.model';
@@ -62,6 +65,58 @@ describe('DashboardService', () => {
 
     it('should be defined', () => {
         expect(service).toBeDefined();
+    });
+
+    describe('getDigest / getSnapshot', () => {
+        const digest: DigestSummary = {
+            generatedAt: '2026-06-22T12:00:00.000Z',
+            scope: 'mine',
+            rollup: {
+                appCount: 3,
+                healthyPct: 66.7,
+                coveragePct: 100,
+                sloPassingPct: 66.7,
+                avgMaturity: 4.2,
+                fastBurnCount: 1,
+            },
+            freshness: {
+                ok: true,
+                failedCount: 0,
+                lastSyncAt: '2026-06-21T12:00:00.000Z',
+                note: null,
+            },
+            priorPeriod: null,
+            movers: [],
+            newRisks: [],
+            note: 'No prior period to compare against yet — point-in-time snapshot.',
+        };
+
+        it('passes undefined to the repository for an unscoped digest', async () => {
+            portfolioRepository.getDigest.mockResolvedValue({ ...digest, scope: 'all' });
+
+            const result = await service.getDigest();
+
+            expect(result.scope).toBe('all');
+            expect(portfolioRepository.getDigest).toHaveBeenCalledWith(undefined);
+        });
+
+        it('passes the scoped email and stamps snapshot metadata (no cross-user leak)', async () => {
+            const portfolio = { id: 'application-portfolio', name: 'P', children: [], apps: [] };
+            portfolioRepository.getPortfolio.mockResolvedValue(portfolio as never);
+            portfolioRepository.getDigest.mockResolvedValue(digest);
+
+            const result = await service.getSnapshot('user@example.com');
+
+            expect(portfolioRepository.getPortfolio).toHaveBeenCalledWith('user@example.com');
+            expect(portfolioRepository.getDigest).toHaveBeenCalledWith('user@example.com');
+            expect(result.portfolio).toBe(portfolio);
+            expect(result.metadata).toEqual({
+                generatedAt: digest.generatedAt,
+                scope: 'mine',
+                freshness: digest.freshness,
+                appCount: 3,
+            });
+        });
     });
 
     describe('getHealthHistory', () => {

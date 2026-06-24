@@ -4,15 +4,19 @@ import { ConfigService } from '@nestjs/config';
 import DashboardController from './dashboard.controller';
 import DashboardService from './dashboard.service';
 import InMemoryPortfolioRepository from './in-memory/in-memory-portfolio.repository';
+import InternalDigestController from './internal-digest.controller';
 import MongoPortfolioRepository from './mongo/mongo-portfolio.repository';
 import ApplicationsModule from '../applications/applications.module';
+import InternalSyncGuard from '../datadog/internal-sync.guard';
 import HealthSnapshotsModule from '../health-snapshots/health-snapshots.module';
+import RecommendationsModule from '../recommendations/recommendations.module';
 
 @Module({
-    imports: [ApplicationsModule, HealthSnapshotsModule],
-    controllers: [DashboardController],
+    imports: [ApplicationsModule, HealthSnapshotsModule, RecommendationsModule],
+    controllers: [DashboardController, InternalDigestController],
     providers: [
         DashboardService,
+        InternalSyncGuard,
         InMemoryPortfolioRepository,
         MongoPortfolioRepository,
         {

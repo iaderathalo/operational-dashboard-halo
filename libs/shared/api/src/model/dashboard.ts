@@ -3,6 +3,7 @@
  */
 import Application, {
     ApplicationMonitor,
+    ApplicationSyntheticCheck,
     ApplicationStatus,
     ApplicationEnvironment,
     StatusOverride,
@@ -12,6 +13,11 @@ import {
     UptimeMetrics,
     UserSessionMetric,
     HealthStatusRecord,
+    PortfolioRollup,
+    DigestFreshness,
+    DigestMover,
+    DigestSummary,
+    SnapshotMetadata,
 } from './dashboard/Dashboard';
 import DashboardDetailResponse, {
     DashboardDetailActivityItem,
@@ -72,11 +78,20 @@ import Incident, {
     IncidentStatus,
     BusinessImpactLevel,
 } from './dashboard/Incident';
+import {
+    RecSignal,
+    RecEffort,
+    RecConfidence,
+    RecFreshness,
+    RecommendationAction,
+    RecommendationResult,
+} from './dashboard/Recommendation';
 import Contact, { ContactRole, Team } from './dashboard/Team';
 
 export {
     Application,
     ApplicationMonitor,
+    ApplicationSyntheticCheck,
     ApplicationStatus,
     ApplicationEnvironment,
     StatusOverride,
@@ -143,6 +158,17 @@ export {
     UptimeMetrics,
     UserSessionMetric,
     HealthStatusRecord,
+    PortfolioRollup,
+    DigestFreshness,
+    DigestMover,
+    DigestSummary,
+    SnapshotMetadata,
     HealthSnapshot,
     HealthHistoryResponse,
+    RecSignal,
+    RecEffort,
+    RecConfidence,
+    RecFreshness,
+    RecommendationAction,
+    RecommendationResult,
 };
