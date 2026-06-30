@@ -3,7 +3,7 @@ import {
     DigestSummary,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
+import { PortfolioAppContext, PortfolioNode, PortfolioSearchResult } from './portfolio.model';
 
 export interface PortfolioRepository {
     getPortfolio(userEmail?: string): Promise<PortfolioNode>;
@@ -13,4 +13,6 @@ export interface PortfolioRepository {
     getAppDetail(appId: string, userEmail?: string): Promise<DashboardDetailResponse | null>;
 
     getDigest(userEmail?: string): Promise<DigestSummary>;
+
+    searchApps(q: string, userEmail?: string): Promise<PortfolioSearchResult[]>;
 }

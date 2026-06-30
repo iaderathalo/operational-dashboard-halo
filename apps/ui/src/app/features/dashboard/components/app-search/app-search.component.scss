@@ -1,0 +1,215 @@
+/** Visually hidden but accessible to screen readers. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+:host {
+    display: inline-block;
+    position: relative;
+}
+
+.app-search {
+    position: relative;
+    display: inline-block;
+}
+
+.app-search-input {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border, #dfe3ea);
+    border-radius: 6px;
+    background: var(--card, #ffffff);
+    color: var(--text, #1a2744);
+    font-size: 13px;
+    width: 220px;
+    outline: none;
+
+    &:focus {
+        border-color: var(--accent, #4a7cff);
+    }
+
+    &::placeholder {
+        color: var(--text2, #5a6a80);
+    }
+}
+
+.app-search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    // Cap at ~8 two-line rows (≈ 42px each) + top/bottom padding
+    max-height: calc(8 * 42px + 8px);
+    overflow-y: auto;
+    background: var(--card, #ffffff);
+    border: 1px solid var(--border, #dfe3ea);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(26, 39, 68, 0.12);
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    z-index: 100;
+}
+
+// ─── Status rows (loading / error / no-results / scope-hint) ─────────────────
+
+.app-search-status {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text2, #5a6a80);
+    cursor: default;
+
+    &--error {
+        color: var(--red, #de350b);
+    }
+
+    &--empty {
+        color: var(--text2, #5a6a80);
+        font-style: italic;
+    }
+}
+
+// Skeleton shimmer lines shown while loading
+.app-search-skeleton {
+    display: block;
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(
+        90deg,
+        var(--grey-bg, #f0f1f4) 25%,
+        var(--border, #dfe3ea) 50%,
+        var(--grey-bg, #f0f1f4) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+    width: 70%;
+
+    &--short {
+        width: 40%;
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+// "Search all applications" affordance in the no-results panel
+.app-search-scope-hint {
+    padding: 4px 12px 8px;
+    cursor: default;
+}
+
+.app-search-scope-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 12px;
+    color: var(--accent, #4a7cff);
+    cursor: pointer;
+    text-decoration: underline;
+
+    &:hover {
+        color: var(--accent-dark, #2255e8);
+    }
+}
+
+// ─── Result rows ─────────────────────────────────────────────────────────────
+
+.app-search-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text, #1a2744);
+
+    &:hover,
+    &.active {
+        background: var(--accent-light, #e8eeff);
+    }
+}
+
+// Health indicator dot
+.app-search-health-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 4px;
+
+    &[data-health='green'] {
+        background: var(--green, #22a06b);
+    }
+    &[data-health='amber'] {
+        background: var(--amber, #e5890a);
+    }
+    &[data-health='red'] {
+        background: var(--red, #de350b);
+    }
+    &[data-health='undefined'] {
+        background: var(--text2, #5a6a80);
+        opacity: 0.45;
+    }
+}
+
+// Body block (name row + breadcrumb)
+.app-search-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.app-search-top-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.app-search-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.app-search-key {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2, #5a6a80);
+    background: var(--grey-bg, #f0f1f4);
+    border-radius: 3px;
+    padding: 1px 5px;
+    white-space: nowrap;
+}
+
+.app-search-breadcrumb {
+    font-size: 11px;
+    color: var(--text2, #5a6a80);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+}

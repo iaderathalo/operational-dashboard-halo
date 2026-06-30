@@ -72,6 +72,7 @@ export interface PortfolioApp {
     errorBudgetRemainingPct?: number | null;
     slaTarget?: number | null;
     burnRate?: AppBurnRate; // 11-2
+    tier?: number; // PlanView DR-Tier (1 = most critical … 4 = least), real catalog value
     maturity?: MaturityScore; // 7-2
     datadogMapped?: boolean;
     resolutionPath?: 'primary' | 'fallback' | 'unmapped' | null;
@@ -102,4 +103,15 @@ export interface PortfolioApp {
 export interface PortfolioAppContext {
     app: PortfolioApp;
     path: PortfolioNode[];
+}
+
+/** Rich projection returned by the dashboard app search endpoint. */
+export interface PortfolioSearchResult {
+    id: string;
+    name: string;
+    shortCode: string;
+    health: 'green' | 'amber' | 'red' | 'undefined';
+    opCo: string;
+    businessUnit: string;
+    lob: string;
 }

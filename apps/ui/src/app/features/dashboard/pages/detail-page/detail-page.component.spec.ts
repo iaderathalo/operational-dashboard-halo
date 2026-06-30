@@ -2,6 +2,8 @@
  * Focused unit tests for DetailPageComponent pure logic.
  * Uses a minimal stub approach to avoid heavy TestBed configuration.
  */
+import { HealthSnapshot } from '@operational-dashboard/shared-api-model/model/dashboard';
+
 import {
     buildDemoRecommendations,
     DETAIL_TABS,
@@ -12,6 +14,7 @@ import {
     REC_SIGNAL_CATEGORY,
     recRingTone,
 } from './detail-page.data';
+import { buildMaturityScoreTooltip, buildMaturitySegments } from '../../maturity.util';
 import { METRIC_DESCRIPTIONS, formatMetricTooltip } from '../../metric-descriptions';
 import { PortfolioApp } from '../../models/portfolio.model';
 
@@ -24,8 +27,8 @@ describe('PERCEPTION_PLACEHOLDER', () => {
         expect(typeof PERCEPTION_PLACEHOLDER).toBe('boolean');
     });
 
-    it('should be true (perception not yet live)', () => {
-        expect(PERCEPTION_PLACEHOLDER).toBe(true);
+    it('should be false (perception tab re-activated)', () => {
+        expect(PERCEPTION_PLACEHOLDER).toBe(false);
     });
 });
 
@@ -38,9 +41,9 @@ describe('DETAIL_TABS with PERCEPTION_PLACEHOLDER', () => {
         (tab) => tab.id !== 'perception' || !PERCEPTION_PLACEHOLDER
     );
 
-    it('should exclude the perception tab when PERCEPTION_PLACEHOLDER is true', () => {
+    it('should include the perception tab when PERCEPTION_PLACEHOLDER is false', () => {
         const perceptionTab = visibleTabs.find((t) => t.id === 'perception');
-        expect(perceptionTab).toBeUndefined();
+        expect(perceptionTab).toBeDefined();
     });
 
     it('should still include the overview and health tabs', () => {
@@ -49,8 +52,8 @@ describe('DETAIL_TABS with PERCEPTION_PLACEHOLDER', () => {
         expect(ids).toContain('health');
     });
 
-    it('should have fewer tabs than the full DETAIL_TABS array', () => {
-        expect(visibleTabs.length).toBeLessThan(DETAIL_TABS.length);
+    it('should include all tabs when no placeholder filtering applies', () => {
+        expect(visibleTabs).toHaveLength(DETAIL_TABS.length);
     });
 });
 
@@ -234,9 +237,9 @@ describe('tab restore from ?tab= query param', () => {
         expect(resolveActiveTab('nonexistent-tab', 'overview')).toBe('overview');
     });
 
-    it('should ignore the perception tab param when PERCEPTION_PLACEHOLDER is true', () => {
-        // 'perception' is filtered out of visibleTabs, so it is invalid
-        expect(resolveActiveTab('perception', 'overview')).toBe('overview');
+    it('should restore the perception tab param when PERCEPTION_PLACEHOLDER is false', () => {
+        // 'perception' is part of visibleTabs again (tab re-activated), so it is a valid restore target
+        expect(resolveActiveTab('perception', 'overview')).toBe('perception');
     });
 
     it('should restore the contacts tab when navigated via deep-link', () => {
@@ -373,5 +376,258 @@ describe('buildDemoRecommendations', () => {
         const result = buildDemoRecommendations(fullyMature);
         expect(result.actions).toEqual([]);
         expect(result.notes).toContain('Fully mature');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// df-1: maturity.util — buildMaturityScoreTooltip + buildMaturitySegments
+// ---------------------------------------------------------------------------
+
+describe('buildMaturityScoreTooltip', () => {
+    it('returns a scored header when maturity is supplied', () => {
+        const tip = buildMaturityScoreTooltip({ score: 3, max: 5 });
+        expect(tip).toContain('Maturity 3/5');
+        expect(tip).toContain('1 point per signal met');
+        expect(tip).toContain('Datadog + PlanView');
+    });
+
+    it('returns a not-scored header when maturity is null', () => {
+        const tip = buildMaturityScoreTooltip(null);
+        expect(tip).toContain('not scored yet');
+    });
+
+    it('returns a not-scored header when maturity is undefined', () => {
+        const tip = buildMaturityScoreTooltip(undefined);
+        expect(tip).toContain('not scored yet');
+    });
+});
+
+describe('buildMaturitySegments', () => {
+    it('returns 5 segments, filled when the signal is true', () => {
+        const segs = buildMaturitySegments({
+            mapped: true,
+            hasMonitor: false,
+            hasSLO: true,
+            sloPassing: false,
+            hasOwner: true,
+        });
+        expect(segs).toHaveLength(5);
+        expect(segs[0].cls).toBe('mat-filled'); // mapped
+        expect(segs[1].cls).toBe('mat-empty'); // hasMonitor
+        expect(segs[2].cls).toBe('mat-filled'); // hasSLO
+        expect(segs[3].cls).toBe('mat-empty'); // sloPassing
+        expect(segs[4].cls).toBe('mat-filled'); // hasOwner
+    });
+
+    it('returns 5 empty segments when signals is null', () => {
+        const segs = buildMaturitySegments(null);
+        expect(segs.every((s) => s.cls === 'mat-empty')).toBe(true);
+    });
+
+    it('includes a check/cross prefix in each tip', () => {
+        const segs = buildMaturitySegments({
+            mapped: true,
+            hasMonitor: false,
+            hasSLO: false,
+            sloPassing: false,
+            hasOwner: false,
+        });
+        expect(segs[0].tip).toMatch(/^✓/);
+        expect(segs[1].tip).toMatch(/^✗/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// df-1: maturityScore getter — reads view.maturity.score on load (no recs)
+// Tests the logic inline since the getter is pure.
+// ---------------------------------------------------------------------------
+
+describe('maturityScore getter logic', () => {
+    /**
+     * Mirrors the getter: recs?.currentScore ?? view?.maturity?.score ?? 0
+     * @param recs
+     * @param recs.currentScore
+     * @param maturityScore
+     */
+    function simulateGetter(recs?: { currentScore: number }, maturityScore?: number): number {
+        const view =
+            maturityScore !== undefined
+                ? { maturity: { score: maturityScore, max: 5, signals: {} } }
+                : undefined;
+        return recs?.currentScore ?? view?.maturity?.score ?? 0;
+    }
+
+    it('reads view.maturity.score when recs is not loaded yet', () => {
+        expect(simulateGetter(undefined, 3)).toBe(3);
+    });
+
+    it('prefers recs.currentScore over view.maturity.score when recs are present', () => {
+        expect(simulateGetter({ currentScore: 4 }, 3)).toBe(4);
+    });
+
+    it('returns 0 when neither recs nor view.maturity is available', () => {
+        expect(simulateGetter(undefined, undefined)).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// df-5: isTimelineBarDrillable + onTimelineBarClick logic
+// Tested inline (no TestBed) since the logic is pure component state.
+// ---------------------------------------------------------------------------
+
+type DashboardDetailTimelineTone = 'g' | 'a' | 'r';
+
+/** Minimal component state stub for df-5 tests. */
+interface DrillState {
+    healthTimelineSnapshots: HealthSnapshot[];
+    selectedTimelinePoint: HealthSnapshot | null;
+    bars: DashboardDetailTimelineTone[];
+}
+
+/**
+ * Mirrors isTimelineBarDrillable logic: bar i is drillable when a snapshot
+ * exists at that index AND the tone is amber or red.
+ * @param state
+ * @param i
+ */
+function isTimelineBarDrillable(state: DrillState, i: number): boolean {
+    const snap = state.healthTimelineSnapshots[i];
+    if (!snap) {
+        return false;
+    }
+    const tone = state.bars[i];
+    return tone === 'a' || tone === 'r';
+}
+
+/**
+ * Mirrors onTimelineBarClick logic: toggles selectedTimelinePoint.
+ * @param state
+ * @param i
+ */
+function onTimelineBarClick(state: DrillState, i: number): void {
+    if (!isTimelineBarDrillable(state, i)) {
+        return;
+    }
+    const snap = state.healthTimelineSnapshots[i];
+    // eslint-disable-next-line no-param-reassign
+    state.selectedTimelinePoint = state.selectedTimelinePoint === snap ? null : snap;
+}
+
+const makeSnap = (status: HealthSnapshot['status']): HealthSnapshot => ({
+    applicationId: 'a1',
+    status,
+    uptimePct: null,
+    datadogMapped: true,
+    monitorCount: 2,
+    resolutionPath: 'primary',
+    recordedAt: '2026-06-29T10:00:00.000Z',
+});
+
+describe('isTimelineBarDrillable (df-5)', () => {
+    it('returns false when healthTimelineSnapshots is empty (demo mode)', () => {
+        const state: DrillState = {
+            healthTimelineSnapshots: [],
+            selectedTimelinePoint: null,
+            bars: ['a', 'r', 'g'],
+        };
+        expect(isTimelineBarDrillable(state, 0)).toBe(false);
+        expect(isTimelineBarDrillable(state, 1)).toBe(false);
+    });
+
+    it('returns false for a green bar even when a snapshot exists', () => {
+        const snap = makeSnap('GREEN');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['g'],
+        };
+        expect(isTimelineBarDrillable(state, 0)).toBe(false);
+    });
+
+    it('returns true for an amber bar with a backing snapshot', () => {
+        const snap = makeSnap('AMBER');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['a'],
+        };
+        expect(isTimelineBarDrillable(state, 0)).toBe(true);
+    });
+
+    it('returns true for a red bar with a backing snapshot', () => {
+        const snap = makeSnap('RED');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['r'],
+        };
+        expect(isTimelineBarDrillable(state, 0)).toBe(true);
+    });
+
+    it('returns false for an out-of-bounds index', () => {
+        const snap = makeSnap('AMBER');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['a'],
+        };
+        expect(isTimelineBarDrillable(state, 5)).toBe(false);
+    });
+});
+
+describe('onTimelineBarClick (df-5)', () => {
+    it('selects the snapshot on first click of an amber bar', () => {
+        const snap = makeSnap('AMBER');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['a'],
+        };
+        onTimelineBarClick(state, 0);
+        expect(state.selectedTimelinePoint).toBe(snap);
+    });
+
+    it('deselects (toggles off) when the same bar is clicked again', () => {
+        const snap = makeSnap('RED');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: snap,
+            bars: ['r'],
+        };
+        onTimelineBarClick(state, 0);
+        expect(state.selectedTimelinePoint).toBeNull();
+    });
+
+    it('switches selection to a different bar', () => {
+        const snapA = makeSnap('AMBER');
+        const snapR = makeSnap('RED');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snapA, snapR],
+            selectedTimelinePoint: snapA,
+            bars: ['a', 'r'],
+        };
+        onTimelineBarClick(state, 1);
+        expect(state.selectedTimelinePoint).toBe(snapR);
+    });
+
+    it('does nothing on a green bar (not drillable)', () => {
+        const snap = makeSnap('GREEN');
+        const state: DrillState = {
+            healthTimelineSnapshots: [snap],
+            selectedTimelinePoint: null,
+            bars: ['g'],
+        };
+        onTimelineBarClick(state, 0);
+        expect(state.selectedTimelinePoint).toBeNull();
+    });
+
+    it('does nothing when healthTimelineSnapshots is empty (demo mode)', () => {
+        const state: DrillState = {
+            healthTimelineSnapshots: [],
+            selectedTimelinePoint: null,
+            bars: ['a'],
+        };
+        onTimelineBarClick(state, 0);
+        expect(state.selectedTimelinePoint).toBeNull();
     });
 });

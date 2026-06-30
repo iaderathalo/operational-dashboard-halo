@@ -15,9 +15,9 @@ import {
 import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
 
-const monitor = (overall_state: DatadogMonitor['overall_state']): DatadogMonitor => ({
+const monitor = (overall_state: DatadogMonitor['overall_state'], name = 'm'): DatadogMonitor => ({
     id: 1,
-    name: 'm',
+    name,
     overall_state,
     tags: [],
 });
@@ -117,6 +117,47 @@ describe('DatadogSyncService.syncAll', () => {
             })
         );
         expect(snapshots.insertSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it('persists failingMonitors with non-green monitors when some are not green', async () => {
+        applicationsService.findAll.mockResolvedValue([mappedApp]);
+        snapshot.monitorsForTag.mockImplementation((k, v) =>
+            k === 'app_short_key' && v === 'intellifi'
+                ? [
+                      monitor('Alert', 'Monitor A'),
+                      monitor('Warn', 'Monitor B'),
+                      monitor('OK', 'Monitor C'),
+                  ]
+                : []
+        );
+
+        await service.syncAll();
+
+        expect(snapshots.insertSnapshot).toHaveBeenCalledWith(
+            expect.objectContaining({
+                failingMonitors: expect.arrayContaining([
+                    expect.objectContaining({ name: 'Monitor A', status: 'RED' }),
+                    expect.objectContaining({ name: 'Monitor B', status: 'AMBER' }),
+                ]),
+            })
+        );
+        const call = (snapshots.insertSnapshot as jest.Mock).mock.calls[0][0];
+        expect(call.failingMonitors.some((m: { name: string }) => m.name === 'Monitor C')).toBe(
+            false
+        );
+    });
+
+    it('persists an empty failingMonitors array when all monitors are green', async () => {
+        applicationsService.findAll.mockResolvedValue([mappedApp]);
+        snapshot.monitorsForTag.mockImplementation((k, v) =>
+            k === 'app_short_key' && v === 'intellifi' ? [monitor('OK', 'All Good')] : []
+        );
+
+        await service.syncAll();
+
+        expect(snapshots.insertSnapshot).toHaveBeenCalledWith(
+            expect.objectContaining({ failingMonitors: [] })
+        );
     });
 
     it('persists the resolved synthetic checks on the app', async () => {

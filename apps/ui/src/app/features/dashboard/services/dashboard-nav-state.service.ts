@@ -6,6 +6,9 @@ import { Injectable } from '@angular/core';
 export default class DashboardNavStateService {
     private lastNodeId: string | null = null;
 
+    /** Last app id opened from the table or the top-bar search — used to expand the tree to it. */
+    private lastAppId: string | null = null;
+
     private lastScrollTop = 0;
 
     /** Sidebar tree nodes that were expanded before leaving the portfolio page. */
@@ -45,6 +48,24 @@ export default class DashboardNavStateService {
     }
 
     /**
+     * Records the app id the user opened, so the portfolio can expand the sidebar tree
+     * down to that app on return (works for both the table and the top-bar search).
+     * @param {string} appId - opened application id.
+     * @returns {void}
+     */
+    setLastAppId(appId: string): void {
+        this.lastAppId = appId;
+    }
+
+    /**
+     * Returns the last opened app id, or null if none was saved.
+     * @returns {string | null} The last opened app id.
+     */
+    getLastAppId(): string | null {
+        return this.lastAppId;
+    }
+
+    /**
      * Returns the last saved scroll position.
      * @returns {number} The last vertical scroll offset.
      */
@@ -77,5 +98,6 @@ export default class DashboardNavStateService {
         this.lastScrollTop = 0;
         this.lastExpandedTreeNodes = new Set();
         this.lastExpandedSections = new Set();
+        this.lastAppId = null;
     }
 }

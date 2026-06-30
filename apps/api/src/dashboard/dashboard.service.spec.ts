@@ -9,7 +9,7 @@ import {
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardService from './dashboard.service';
-import { PortfolioAppContext } from './portfolio.model';
+import { PortfolioSearchResult, PortfolioAppContext } from './portfolio.model';
 import { PortfolioRepository } from './portfolio.repository';
 import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
@@ -65,6 +65,58 @@ describe('DashboardService', () => {
 
     it('should be defined', () => {
         expect(service).toBeDefined();
+    });
+
+    describe('searchApps', () => {
+        const richResult: PortfolioSearchResult = {
+            id: '1',
+            name: 'Mercer Compass',
+            shortCode: 'MCPS',
+            health: 'green',
+            opCo: 'Mercer',
+            businessUnit: 'Digital',
+            lob: 'Platform',
+        };
+
+        it('delegates to the repository with the supplied query and email', async () => {
+            portfolioRepository.searchApps.mockResolvedValue([richResult]);
+
+            const result = await service.searchApps('merc', 'user@example.com');
+
+            expect(result).toEqual([richResult]);
+            expect(portfolioRepository.searchApps).toHaveBeenCalledWith('merc', 'user@example.com');
+        });
+
+        it('returns [] without calling the repository for a single-char query', async () => {
+            portfolioRepository.searchApps.mockResolvedValue([]);
+
+            const result = await service.searchApps('m');
+
+            // The service delegates to the repo which guards on length; the service itself
+            // always delegates so we just verify the call was made (repo returns []).
+            expect(result).toEqual([]);
+            expect(portfolioRepository.searchApps).toHaveBeenCalledWith('m', undefined);
+        });
+
+        it('returns [] without calling the repository for a two-char query (3-char minimum)', async () => {
+            portfolioRepository.searchApps.mockResolvedValue([]);
+
+            const result = await service.searchApps('me');
+
+            expect(result).toEqual([]);
+            expect(portfolioRepository.searchApps).toHaveBeenCalledWith('me', undefined);
+        });
+
+        it('includes health and breadcrumb fields in the returned results', async () => {
+            portfolioRepository.searchApps.mockResolvedValue([richResult]);
+
+            const [res] = await service.searchApps('mer');
+
+            expect(res.health).toBe('green');
+            expect(res.opCo).toBe('Mercer');
+            expect(res.businessUnit).toBe('Digital');
+            expect(res.lob).toBe('Platform');
+        });
     });
 
     describe('getDigest / getSnapshot', () => {

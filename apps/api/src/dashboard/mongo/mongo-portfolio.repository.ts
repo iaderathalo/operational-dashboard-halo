@@ -11,7 +11,12 @@ import {
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import MongoRepository from '../../repository/mongo/mongo-repository';
-import { PortfolioAppContext, PortfolioNode, PortfolioNodeRollup } from '../portfolio.model';
+import {
+    PortfolioAppContext,
+    PortfolioNode,
+    PortfolioNodeRollup,
+    PortfolioSearchResult,
+} from '../portfolio.model';
 import { PortfolioRepository } from '../portfolio.repository';
 import { StoredApplication } from './mongo-portfolio.types';
 import { PortfolioBuilderUtility } from './portfolio-builder.utility';
@@ -192,6 +197,10 @@ export default class MongoPortfolioRepository
         );
 
         await Promise.all([
+            // Unique key for PlanView-sourced apps. Mirrors the index the PlanView
+            // sync creates, so every deploy ensures it even before/without a sync run
+            // (e.g. a fresh environment). Same spec as the sync, so it stays idempotent.
+            collection.createIndex({ planviewInternalId: 1 }, { unique: true }),
             collection.createIndex({ active: 1 }),
             collection.createIndex(
                 { itOwnerEmail: 1 },
@@ -210,6 +219,97 @@ export default class MongoPortfolioRepository
     /** Invalidates the portfolio cache for all scopes. */
     invalidateCache(): void {
         this.portfolioCache.clear();
+    }
+
+    /**
+     * Searches applications by shortCode prefix or name substring, scoped to the
+     * owner and operating-company allowlist. Returns at most 20 rich results
+     * including health status and hierarchy breadcrumb (OpCo / BU / LOB).
+     * @param {string} q - search query (minimum 3 characters for a result)
+     * @param {string} [userEmail] - optional email used to scope to owned applications
+     * @returns {Promise<PortfolioSearchResult[]>} matching application results
+     */
+    async searchApps(q: string, userEmail?: string): Promise<PortfolioSearchResult[]> {
+        if (q.trim().length < 3) {
+            return [];
+        }
+
+        const escaped = MongoPortfolioRepository.escapeRegex(q.trim());
+
+        const filters: Record<string, unknown>[] = [
+            { active: { $ne: false } },
+            {
+                $or: [
+                    { shortCode: { $regex: `^${escaped}`, $options: 'i' } },
+                    { name: { $regex: escaped, $options: 'i' } },
+                ],
+            },
+        ];
+
+        if (this.opCoAllowlist.length) {
+            filters.push({
+                $or: this.opCoAllowlist.map((o) => ({
+                    opCo: { $regex: `^${o}$`, $options: 'i' },
+                })),
+            });
+        }
+
+        if (userEmail) {
+            filters.push({
+                $or: [
+                    { itOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+                    { portfolioOwnerEmail: { $regex: `^${userEmail}$`, $options: 'i' } },
+                ],
+            });
+        }
+
+        // Full docs (no projection) — capped at 20, so mapping each via buildSingleAppContext is cheap.
+        const docs = await (
+            await this.getCollection<StoredApplication>(this.applicationsCollectionName)
+        )
+            .find({ $and: filters })
+            .limit(20)
+            .toArray();
+
+        return docs
+            .map((doc) => MongoPortfolioRepository.toSearchResult(doc, this.opCoAllowlist))
+            .filter((r): r is PortfolioSearchResult => r !== null);
+    }
+
+    /**
+     * Maps a stored application to a slim search result — id, name, shortCode, health, and the
+     * OpCo / BU / LOB breadcrumb (via buildSingleAppContext). Null when outside the OpCo allowlist.
+     * @param {StoredApplication} doc - the stored application document
+     * @param {string[]} opCoAllowlist - lowercased OpCo allowlist
+     * @returns {PortfolioSearchResult | null} the search result, or null if filtered out
+     */
+    private static toSearchResult(
+        doc: StoredApplication,
+        opCoAllowlist: string[]
+    ): PortfolioSearchResult | null {
+        const context = MongoPortfolioRepository.buildSingleAppContext(doc, opCoAllowlist);
+        if (!context) {
+            return null;
+        }
+        const { app, path } = context;
+        return {
+            id: app.id,
+            name: app.name,
+            shortCode: doc.shortCode || '',
+            health: app.health,
+            opCo: path[1]?.name || '',
+            businessUnit: path[2]?.name || '',
+            lob: path[3]?.name || '',
+        };
+    }
+
+    /**
+     * Escapes special regex characters in a user-supplied search term.
+     * @param {string} s - raw user input
+     * @returns {string} regex-safe string
+     */
+    private static escapeRegex(s: string): string {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     /**
@@ -531,6 +631,7 @@ export default class MongoPortfolioRepository
                 status: check.status,
                 uptime: check.uptime,
             })),
+            tier: application.tier,
             maturity: PortfolioBuilderUtility.computeMaturity(application),
             burnRate: PortfolioBuilderUtility.computeBurnRate(application),
             users: application.currentUserCount || 0,

@@ -32,6 +32,13 @@ type FeatureDefinition = {
     spark: readonly number[];
 };
 
+/** df-3: plain-language breach outlook per burn-rate band (11-2). */
+const BURN_BREACH_TEXT: Record<'healthy' | 'fast-burn' | 'at-risk', string> = {
+    healthy: 'On track — budget should last the month',
+    'fast-burn': 'Spending the budget faster than allowed',
+    'at-risk': 'At risk — budget on track to run out early',
+};
+
 const HEADER_HEALTH_LABELS: Record<DashboardDetailStatus, string> = {
     green: 'Healthy',
     amber: 'Degraded',
@@ -99,8 +106,6 @@ const PERFORMANCE_TREND_SERIES = [
         values: [6, 6, 6, 7, 7, 7, 6, 6, 6, 6, 6, 6],
     },
 ];
-
-const TIMELINE_AXIS = ['Feb 27', 'Feb 28', 'Mar 01', 'Mar 02', 'Mar 03', 'Mar 04', 'Mar 05'];
 
 const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     {
@@ -301,8 +306,6 @@ const buildIncidentTrendText = (count: number): string => {
     return 'Sev-3 · investigating';
 };
 
-const resolveTier = (uptime: number): number => (uptime >= 99.95 ? 1 : 2);
-
 /**
  * Maps remaining error-budget percentage to a status colour: greener with more
  * headroom, red when nearly exhausted, grey when there is no SLO to measure.
@@ -339,8 +342,8 @@ const createOverviewMetrics = (
         label: 'Uptime (30d)',
         value: uptimeValue,
         color: 'green',
-        trend: 'up',
-        trendText: '▲ 0.02% vs 7d avg',
+        trend: 'neutral',
+        trendText: 'Datadog SLO · 30d',
         source: 'datadog',
     },
     {
@@ -355,8 +358,8 @@ const createOverviewMetrics = (
         label: 'Active Users',
         value: usersValue,
         color: 'green',
-        trend: 'up',
-        trendText: '▲ 12% vs avg',
+        trend: 'neutral',
+        trendText: 'Total users · PlanView',
         source: 'planview',
     },
     {
@@ -584,11 +587,20 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
     const errorBudgetTrendText =
         app.slaTarget != null ? `SLA target ${app.slaTarget}%` : 'No SLO data';
 
+    // df-3: surface the real 11-2 burn rate on the card (was always a placeholder).
+    const burn = app.burnRate;
+    const burnRateValue =
+        burn?.rate != null ? `${burn.rate.toFixed(2)}x` : missingDatadog(app.datadogMapped);
+    const burnRateBreach =
+        burn?.rate != null && burn.band !== 'unknown'
+            ? BURN_BREACH_TEXT[burn.band]
+            : missingDatadog(app.datadogMapped);
+
     const view: DashboardDetailView = {
         name: app.name,
         businessUnit: scope?.name || 'Unknown Business Unit',
         environment: 'Production',
-        tier: resolveTier(app.uptime),
+        tier: app.tier ?? 4,
         owner: scope?.owner || 'Unknown Owner',
         ownerRole: scope?.role || 'Unknown Role',
         health: app.health,
@@ -606,14 +618,14 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
         slaTarget: slaTargetValue,
         errorBudget: {
             remaining: errorBudgetRemaining,
-            total: 'error budget',
-            used:
-                errorBudgetPct != null
-                    ? `${(100 - errorBudgetPct).toFixed(1)}%`
-                    : missingDatadog(app.datadogMapped),
+            total: '',
+            // Empty (not a "No data" string) when there's no SLO value, so the card can
+            // suppress the "remaining"/"used" suffixes instead of rendering the misleading
+            // "No data remaining". The two-state text rides on `remaining` above.
+            used: errorBudgetPct != null ? `${(100 - errorBudgetPct).toFixed(1)}%` : '',
             pct: errorBudgetPct != null ? Math.round(errorBudgetPct) : 0,
-            burnRate: missingDatadog(app.datadogMapped),
-            breach: missingDatadog(app.datadogMapped),
+            burnRate: burnRateValue,
+            breach: burnRateBreach,
         },
         activeUsers: {
             value: usersValue,
@@ -626,7 +638,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             trend: 'neutral',
             trendText: buildIncidentTrendText(incidentCount),
         },
-        timelineAxis: TIMELINE_AXIS,
+        timelineAxis: [],
         timelineIncidents: [
             { sev: 3, pos: '18%', color: 'var(--amber)', title: 'Sev-3: Queue depth warning' },
             { sev: 3, pos: '62%', color: 'var(--grey)', title: 'Sev-3: Certificate renewal' },
@@ -1082,6 +1094,7 @@ const createDashboardDetailResponse = (context: PortfolioAppContext): DashboardD
             resolveErrorBudgetColor(errorBudgetPct),
             errorBudgetTrendText
         ),
+        maturity: app.maturity,
     };
 
     return clone({

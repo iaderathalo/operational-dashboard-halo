@@ -13,6 +13,7 @@ import HttpRetryInterceptor from '@operational-dashboard/shared-angular-utils/ht
 
 import AppRoutingModule from './app-routing.module';
 import AppComponent from './app.component';
+import AppSearchComponent from './features/dashboard/components/app-search/app-search.component';
 import GalleryComponent from './features/gallery/gallery.component';
 import TaskManagementService from './features/task-management/services/task-management.service';
 import OktaCallbackComponent from './okta-callback/okta-callback.component';
@@ -39,6 +40,7 @@ if (oktaAuth) {
     bootstrap: [AppComponent],
     imports: [
         AppRoutingModule,
+        AppSearchComponent,
         BrowserModule,
         FormsModule,
         ServiceWorkerModule.register('ngsw-worker.js', {

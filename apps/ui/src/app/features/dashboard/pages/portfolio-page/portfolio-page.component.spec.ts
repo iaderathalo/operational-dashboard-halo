@@ -3,6 +3,7 @@
  * Heavy TestBed setup is avoided — methods are tested directly via a lightweight
  * partial-mock approach so the suite stays fast and dependency-free.
  */
+import { PortfolioApp } from '../../models/portfolio.model';
 import DashboardNavStateService from '../../services/dashboard-nav-state.service';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,21 @@ describe('DashboardNavStateService', () => {
         const restored = service.getLastExpandedSections();
         expect(restored.has('section-a')).toBe(true);
         expect(restored.has('section-b')).toBe(true);
+    });
+
+    it('getLastAppId should return null initially', () => {
+        expect(service.getLastAppId()).toBeNull();
+    });
+
+    it('setLastAppId then getLastAppId should return the saved id', () => {
+        service.setLastAppId('app-xyz');
+        expect(service.getLastAppId()).toBe('app-xyz');
+    });
+
+    it('clearNodeContext should reset getLastAppId to null', () => {
+        service.setLastAppId('app-xyz');
+        service.clearNodeContext();
+        expect(service.getLastAppId()).toBeNull();
     });
 });
 
@@ -201,5 +217,95 @@ describe('perception placeholder flag', () => {
         // Import the constant inline to keep the test self-contained
         const placeholderColumns = { perception: true };
         expect(placeholderColumns.perception).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// df-4: computeTopRiskApps — datadogMapped filter
+// Mirrors the component's filter logic in isolation so no TestBed is needed.
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal valid PortfolioApp builder for risk-filter tests.
+ * @param overrides
+ */
+function makeApp(overrides: Partial<PortfolioApp>): PortfolioApp {
+    return {
+        id: 'test-id',
+        name: 'Test App',
+        health: 'green',
+        perception: 'green',
+        uptime: null,
+        users: 0,
+        totalInternalUsers: 0,
+        totalExternalUsers: 0,
+        activeUsers: null,
+        incidents: 0,
+        lastIncident: '',
+        ...overrides,
+    };
+}
+
+const HEALTH_RISK_WEIGHTS_TEST: Record<string, number> = { red: 3, amber: 2 };
+const BURN_RISK_WEIGHTS_TEST: Record<string, number> = { 'at-risk': 2, 'fast-burn': 1 };
+
+/**
+ *
+ * @param a
+ */
+function appRiskTest(a: PortfolioApp): number {
+    const health = HEALTH_RISK_WEIGHTS_TEST[a.health] ?? 0;
+    const burn = BURN_RISK_WEIGHTS_TEST[a.burnRate?.band ?? ''] ?? 0;
+    return health * 2 + burn;
+}
+
+/**
+ * Standalone replica of computeTopRiskApps (df-4 version) for isolated testing.
+ * @param apps
+ */
+function computeTopRiskApps(apps: PortfolioApp[]): PortfolioApp[] {
+    return apps
+        .filter((a) => a.datadogMapped !== false)
+        .filter((a) => a.health === 'red' || a.health === 'amber' || a.burnRate?.band === 'at-risk')
+        .sort((a, b) => appRiskTest(b) - appRiskTest(a))
+        .slice(0, 5);
+}
+
+describe('computeTopRiskApps (df-4)', () => {
+    it('should exclude an app with datadogMapped: false even when health is amber', () => {
+        const unmappedAmber = makeApp({ health: 'amber', datadogMapped: false });
+        const result = computeTopRiskApps([unmappedAmber]);
+        expect(result).toHaveLength(0);
+    });
+
+    it('should include an app with datadogMapped: true and health amber', () => {
+        const mappedAmber = makeApp({ health: 'amber', datadogMapped: true });
+        const result = computeTopRiskApps([mappedAmber]);
+        expect(result).toHaveLength(1);
+        expect(result[0].name).toBe('Test App');
+    });
+
+    it('should include an app with datadogMapped: undefined and health amber (undefined is not false)', () => {
+        const unknownMapped = makeApp({ health: 'amber' });
+        const result = computeTopRiskApps([unknownMapped]);
+        expect(result).toHaveLength(1);
+    });
+
+    it('should exclude only the unmapped apps and keep the rest', () => {
+        const unmapped = makeApp({
+            id: 'unmapped',
+            name: 'No Data',
+            health: 'amber',
+            datadogMapped: false,
+        });
+        const mapped = makeApp({
+            id: 'mapped',
+            name: 'Real Risk',
+            health: 'red',
+            datadogMapped: true,
+        });
+        const result = computeTopRiskApps([unmapped, mapped]);
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('mapped');
     });
 });

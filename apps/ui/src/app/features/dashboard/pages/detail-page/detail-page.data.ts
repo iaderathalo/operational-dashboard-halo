@@ -70,7 +70,7 @@ type HeatmapTone = 'g' | 'a' | 'r' | 'x';
  * the Perception data source is not yet wired to a live feed.
  * Flip to false once Perception is live to reveal the tab everywhere.
  */
-export const PERCEPTION_PLACEHOLDER = true;
+export const PERCEPTION_PLACEHOLDER = false;
 
 export const DETAIL_TABS: ReadonlyArray<{ id: DetailTabId; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -634,12 +634,12 @@ const DETAIL_TEMPLATE = {
     uptime: { value: '99.99%', trend: 'up' as const, trendText: '▲ 0.02% vs 7d avg' },
     slaTarget: '99.95%',
     errorBudget: {
-        remaining: '18 min',
-        total: '22 min',
-        used: '4 min',
+        remaining: '82.0%',
+        total: '',
+        used: '18.0%',
         pct: 82,
-        burnRate: '0.6 min/day',
-        breach: 'Never (at current rate)',
+        burnRate: '0.60x',
+        breach: 'On track — budget should last the month',
     },
     activeUsers: { value: '3,812', trend: 'up' as const, trendText: '▲ 12% vs avg', peak: '4,102' },
     openIncidents: { count: 1, trend: 'neutral' as const, trendText: 'Sev-3 · investigating' },
@@ -1240,8 +1240,8 @@ const createOverviewMetrics = (
         label: 'Uptime (30d)',
         value: uptimeValue,
         color: 'green' as const,
-        trend: DETAIL_TEMPLATE.uptime.trend,
-        trendText: DETAIL_TEMPLATE.uptime.trendText,
+        trend: 'neutral' as const,
+        trendText: 'Datadog SLO · 30d',
         source: 'datadog' as const,
     },
     {
@@ -1256,8 +1256,8 @@ const createOverviewMetrics = (
         label: 'Active Users',
         value: usersValue,
         color: 'green' as const,
-        trend: DETAIL_TEMPLATE.activeUsers.trend,
-        trendText: DETAIL_TEMPLATE.activeUsers.trendText,
+        trend: 'neutral' as const,
+        trendText: 'Total users · PlanView',
         source: 'planview' as const,
     },
     {
@@ -1273,7 +1273,7 @@ const createOverviewMetrics = (
         value: DETAIL_TEMPLATE.errorBudget.remaining,
         color: 'green' as const,
         trend: 'neutral' as const,
-        trendText: `of ${DETAIL_TEMPLATE.errorBudget.total} remaining`,
+        trendText: 'SLA target 99.95%',
         source: 'datadog' as const,
     },
     {
@@ -1307,10 +1307,9 @@ export const createDetailView = (context: PortfolioAppContext | null) => {
     const scope = context?.path[context.path.length - 1];
     const health = app?.health || DETAIL_TEMPLATE.health;
     const perception = app?.perception || DETAIL_TEMPLATE.perception;
-    const usersValue =
-        app?.activeUsers !== null && app?.activeUsers !== undefined
-            ? app.activeUsers.toLocaleString()
-            : 'No data';
+    const resolvedUserCount =
+        app?.activeUsers ?? (app?.totalInternalUsers ?? 0) + (app?.totalExternalUsers ?? 0);
+    const usersValue = resolvedUserCount ? resolvedUserCount.toLocaleString() : 'No data';
     const incidentCount = app?.incidents ?? DETAIL_TEMPLATE.openIncidents.count;
     const uptimeValue =
         app?.uptime !== null && app?.uptime !== undefined ? `${app.uptime.toFixed(2)}%` : 'No data';
@@ -1353,6 +1352,7 @@ export const createDetailView = (context: PortfolioAppContext | null) => {
             incidentCount,
             activeDriftModels
         ),
+        maturity: app?.maturity,
     };
 };
 
@@ -1576,6 +1576,13 @@ const DETAIL_CARD_METRIC_KEYS: Record<string, MetricKey> = {
     'Recent Health Events': 'recentHealthEvents',
     'Health Check Breakdown': 'healthCheckBreakdown',
 };
+
+/** 13-11: visible key for the source dots so a business reader gets "real vs sample" without docs. */
+export const SOURCE_LEGEND: ReadonlyArray<{ source: DashboardDetailSource; label: string }> = [
+    { source: 'datadog', label: 'Live · Datadog' },
+    { source: 'planview', label: 'Real · PlanView' },
+    { source: 'placeholder', label: 'Sample · not wired yet' },
+];
 
 /**
  * Builds a provenance tooltip for a detail card, optionally prefixed with the metric description

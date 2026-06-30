@@ -87,6 +87,17 @@ export interface UserSessionMetric {
     source: string;
 }
 
+/** Rich projection returned by the dashboard portfolio search endpoint. */
+export interface PortfolioSearchResult {
+    id: string;
+    name: string;
+    shortCode: string;
+    health: 'green' | 'amber' | 'red' | 'undefined';
+    opCo: string;
+    businessUnit: string;
+    lob: string;
+}
+
 export interface HealthStatusRecord {
     id?: string;
     applicationId: string;

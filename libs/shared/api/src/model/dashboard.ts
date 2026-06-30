@@ -18,11 +18,13 @@ import {
     DigestMover,
     DigestSummary,
     SnapshotMetadata,
+    PortfolioSearchResult,
 } from './dashboard/Dashboard';
 import DashboardDetailResponse, {
     DashboardDetailActivityItem,
     DashboardDetailActivityTone,
     DashboardDetailAiDrift,
+    DashboardDetailMaturity,
     DashboardDetailAiDriftDataQuality,
     DashboardDetailAiDriftEvent,
     DashboardDetailAiDriftFeature,
@@ -101,6 +103,7 @@ export {
     DashboardDetailResponse,
     DashboardDetailActivityItem,
     DashboardDetailAiDrift,
+    DashboardDetailMaturity,
     DashboardDetailAiDriftDataQuality,
     DashboardDetailAiDriftEvent,
     DashboardDetailAiDriftFeature,
@@ -171,4 +174,5 @@ export {
     RecFreshness,
     RecommendationAction,
     RecommendationResult,
+    PortfolioSearchResult,
 };

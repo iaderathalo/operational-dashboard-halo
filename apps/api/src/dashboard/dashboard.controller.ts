@@ -10,7 +10,7 @@ import {
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
 import DashboardService from './dashboard.service';
-import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
+import { PortfolioAppContext, PortfolioNode, PortfolioSearchResult } from './portfolio.model';
 import RecommendationsService from '../recommendations/recommendations.service';
 
 @Controller('dashboard')
@@ -51,6 +51,28 @@ export default class DashboardController {
         @Query('scope') scope?: string
     ): Promise<PortfolioNode> {
         return this.dashboardService.getPortfolio(
+            DashboardController.scopedEmail(scope, request.user?.email)
+        );
+    }
+
+    /**
+     * Searches portfolio applications by app_short_key prefix or name for the
+     * dashboard typeahead. Respects All / My Applications scope.
+     * @param {object} request - authenticated request wrapper
+     * @param {object} [request.user] - authenticated user payload when present
+     * @param {string} [request.user.email] - email used to scope the portfolio
+     * @param {string} [q] - search term
+     * @param {string} [scope] - 'mine' to scope to owned apps, otherwise all
+     * @returns {Promise<PortfolioSearchResult[]>} slim search results
+     */
+    @Get('portfolio/search')
+    async searchApps(
+        @Req() request: { user?: { email?: string } },
+        @Query('q') q?: string,
+        @Query('scope') scope?: string
+    ): Promise<PortfolioSearchResult[]> {
+        return this.dashboardService.searchApps(
+            q ?? '',
             DashboardController.scopedEmail(scope, request.user?.email)
         );
     }

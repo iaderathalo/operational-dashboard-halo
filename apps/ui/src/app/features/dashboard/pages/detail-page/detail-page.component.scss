@@ -113,6 +113,16 @@
     color: var(--amber);
 }
 
+.tier-3 {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.tier-4 {
+    background: var(--grey-bg);
+    color: var(--text2);
+}
+
 .dual-badges {
     display: flex;
     gap: 6px;
@@ -437,6 +447,20 @@
     align-items: center;
     gap: 12px;
     margin-bottom: 6px;
+}
+
+.timeline-row.preview {
+    opacity: 0.5;
+}
+
+.preview-tag {
+    margin-left: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text2);
+    vertical-align: middle;
 }
 
 .range-row {
@@ -771,8 +795,9 @@
     color: var(--text2);
 }
 
-// Live-vs-placeholder provenance dot on detail cards (green = live Datadog,
-// grey = placeholder / PlanView; the tooltip carries the detail).
+// Provenance dot on detail cards. A filled COLOURED dot = real data (green = live
+// Datadog, blue = real from the PlanView catalog); a hollow grey ring = sample / not
+// wired yet. Keeping "real" colourful avoids reading catalog data as fake. Tooltip carries detail.
 .src-dot {
     position: relative;
     display: inline-block;
@@ -789,11 +814,13 @@
 }
 
 .src-dot.planview {
-    background: var(--text2);
+    background: var(--accent);
 }
 
 .src-dot.placeholder {
-    background: var(--grey);
+    background: transparent;
+    border: 1.5px solid var(--grey);
+    box-sizing: border-box;
 }
 
 // Instant provenance tooltip. max-width + white-space: pre-line keeps multi-line copy
@@ -824,6 +851,33 @@
 
 .src-dot:hover::after {
     opacity: 1;
+}
+
+.src-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--text2);
+}
+
+.src-legend-title {
+    font-weight: 600;
+}
+
+.src-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+/* keep the legend dots from inheriting the absolutely-positioned ::after tooltip behavior */
+.src-legend .src-dot {
+    position: static;
+    cursor: default;
 }
 
 .activity-item {
@@ -2434,4 +2488,131 @@
     100% {
         background-position: 0 50%;
     }
+}
+
+// df-1: Maturity signal breakdown in the Recommendations card ----------------
+.mat-breakdown {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    margin: 8px 0 4px;
+}
+
+.mat-seg {
+    width: 16px;
+    height: 9px;
+    border-radius: 3px;
+    background: var(--border);
+    cursor: help;
+}
+
+.mat-seg.mat-filled {
+    background: var(--green);
+}
+
+.mat-label {
+    margin-left: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+}
+
+.prov-cell {
+    position: relative;
+    cursor: help;
+}
+
+// Tooltip for maturity segment cells — copied verbatim from portfolio-page so
+// the appearance is identical to the portfolio table.
+.prov-cell::after {
+    content: attr(data-prov);
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 9999;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--text);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-line;
+    width: max-content;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(26, 39, 68, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.prov-cell:hover::after {
+    opacity: 1;
+}
+
+// df-5: Combined Status Timeline bar drill-down --------------------------------
+
+.timeline-bar .clickable {
+    cursor: pointer;
+    opacity: 0.85;
+
+    &:hover {
+        opacity: 1;
+        outline: 2px solid rgba(255, 255, 255, 0.6);
+        outline-offset: -1px;
+    }
+}
+
+.timeline-cause-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--r) var(--r);
+    background: var(--bg);
+}
+
+.timeline-cause-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.timeline-cause-time {
+    font-size: 12px;
+    color: var(--text2);
+}
+
+.timeline-cause-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text2);
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+
+    strong {
+        color: var(--text);
+    }
+}
+
+.timeline-cause-monitors {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+}
+
+.timeline-cause-note {
+    font-size: 12px;
+    color: var(--text2);
+    font-style: italic;
+}
+
+.timeline-cause-monitor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 12px;
+    color: var(--text);
 }

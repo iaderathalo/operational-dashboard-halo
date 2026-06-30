@@ -1,3 +1,5 @@
+import { ConfigService } from '@nestjs/config';
+
 import MongoPortfolioRepository from './mongo-portfolio.repository';
 import { PortfolioBuilderUtility } from './portfolio-builder.utility';
 
@@ -412,5 +414,65 @@ describe('MongoPortfolioRepository.cacheKey', () => {
 
     it('lowercases the email for consistent cache hits', () => {
         expect(cacheKey('User@Example.COM')).toBe('user@example.com');
+    });
+});
+
+describe('MongoPortfolioRepository.searchApps — short-circuit guard', () => {
+    // Instantiate with minimal mocks; the guard returns [] before hitting getCollection.
+    const makeRepo = () => {
+        const configService = {
+            get: jest.fn().mockReturnValue(''),
+        } as unknown as ConfigService;
+        const logger = {
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn(),
+        } as never;
+        return new MongoPortfolioRepository(configService, logger);
+    };
+
+    it('returns [] for a 1-character query (below the 3-char minimum)', async () => {
+        const repo = makeRepo();
+        const result = await repo.searchApps('a');
+        expect(result).toEqual([]);
+    });
+
+    it('returns [] for a 2-character query (below the 3-char minimum)', async () => {
+        const repo = makeRepo();
+        const result = await repo.searchApps('ab');
+        expect(result).toEqual([]);
+    });
+
+    it('returns [] for a whitespace-only query', async () => {
+        const repo = makeRepo();
+        const result = await repo.searchApps('  ');
+        expect(result).toEqual([]);
+    });
+
+    it('returns [] for a 2-char trimmed query padded with spaces', async () => {
+        const repo = makeRepo();
+        const result = await repo.searchApps('  ab  ');
+        expect(result).toEqual([]);
+    });
+});
+
+describe('MongoPortfolioRepository.escapeRegex', () => {
+    const escapeRegex = (s: string): string =>
+        (
+            MongoPortfolioRepository as unknown as {
+                escapeRegex: (s: string) => string;
+            }
+        ).escapeRegex(s);
+
+    it('escapes dot and star', () => {
+        expect(escapeRegex('a.b*')).toBe('a\\.b\\*');
+    });
+
+    it('passes through plain alphanumeric strings unchanged', () => {
+        expect(escapeRegex('MercerCompass')).toBe('MercerCompass');
+    });
+
+    it('escapes parentheses and brackets', () => {
+        expect(escapeRegex('foo(bar)[baz]')).toBe('foo\\(bar\\)\\[baz\\]');
     });
 });

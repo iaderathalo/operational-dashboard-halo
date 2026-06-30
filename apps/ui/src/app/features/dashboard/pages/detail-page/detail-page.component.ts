@@ -1,8 +1,9 @@
+/* eslint-disable max-lines */
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { combineLatest, Subscription } from 'rxjs';
 
 import {
     DashboardDetailChannelOption,
@@ -32,10 +33,12 @@ import {
     REC_SIGNAL_CATEGORY,
     recRingTone,
     shortenSyntheticCheckName,
+    SOURCE_LEGEND,
     statusLabel,
     syntheticCheckTone,
     windowHealthByRange,
 } from './detail-page.data';
+import { buildMaturityScoreTooltip, buildMaturitySegments } from '../../maturity.util';
 import { METRIC_DESCRIPTIONS, formatMetricTooltip } from '../../metric-descriptions';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 import DashboardService from '../../services/dashboard.service';
@@ -82,8 +85,33 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     /** Recent Health Events + Recent Activity derive from the real synced series, not seeded (E12-S1). */
     syncedCardsReal = false;
 
+    /**
+     * df-6: the synced-data cards (Recent Activity, Recent Health Events) are sourced from live
+     * Datadog snapshots whenever we are in real-data mode — the provenance dot must reflect that
+     * source, NOT the timeline-fetch timing (which left real data showing a grey "sample" dot).
+     * @returns {boolean} true in real-data mode
+     */
+    get syncedCardsLive(): boolean {
+        return this.dataModeService.currentMode === 'real';
+    }
+
+    /** df-6: true while the real synced feed is still loading (real mode only) — shows a loading state. */
+    syncedCardsLoading = false;
+
+    /** df-6: true when the synced feed failed to load — cards show an honest "unavailable" state, not seed. */
+    syncedCardsError = false;
+
     /** Full Health series from the backend; re-windowed by the active overview range (7-1). */
     private healthSeries: HealthSnapshot[] = [];
+
+    /**
+     * Sorted (ASC) slice of healthSeries matching the active range window.
+     * Index i here aligns 1:1 with view.healthTimelineBars[i] (df-5).
+     */
+    healthTimelineSnapshots: HealthSnapshot[] = [];
+
+    /** df-5: snapshot selected by clicking an amber/red bar on the live overview timeline. */
+    selectedTimelinePoint: HealthSnapshot | null = null;
 
     isSev1ModalOpen = false;
 
@@ -120,7 +148,7 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     private toastTimeoutHandle?: ReturnType<typeof setTimeout>;
 
-    private modeSubscription?: Subscription;
+    private subscription?: Subscription;
 
     /**
      * Creates the detail page component with route and navigation services.
@@ -142,30 +170,37 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
      * @returns {void}
      */
     ngOnInit(): void {
-        const id = this.route.snapshot.paramMap.get('id') || '';
+        // React to BOTH the route param and the data-mode. Navigating between detail pages (e.g. via
+        // the header search) reuses this component, so ngOnInit does NOT re-fire — subscribing to
+        // paramMap is what reloads the page when the :id changes. combineLatest fires once on init
+        // (single load) and again on any id/mode change.
+        this.subscription = combineLatest([
+            this.route.paramMap,
+            this.dataModeService.mode$,
+        ]).subscribe(([params]) => {
+            const id = params.get('id') || '';
 
-        if (!id) {
-            this.loadError = 'Application detail is unavailable.';
-            this.isLoading = false;
-            return;
-        }
+            if (!id) {
+                this.loadError = 'Application detail is unavailable.';
+                this.isLoading = false;
+                return;
+            }
 
-        const tabParam = this.route.snapshot.queryParamMap.get('tab') as DetailTabId | null;
-        if (tabParam && this.tabs.some((t) => t.id === tabParam)) {
-            this.activeTab = tabParam;
-        }
+            const tabParam = this.route.snapshot.queryParamMap.get('tab') as DetailTabId | null;
+            if (tabParam && this.tabs.some((t) => t.id === tabParam)) {
+                this.activeTab = tabParam;
+            }
 
-        this.currentAppId = id;
-        this.modeSubscription = this.dataModeService.mode$.subscribe(() =>
-            this.loadDetail(this.currentAppId)
-        );
+            this.currentAppId = id;
+            this.loadDetail(id);
+        });
     }
 
     /**
      * Clears any pending toast timer when the component is destroyed.
      */
     ngOnDestroy(): void {
-        this.modeSubscription?.unsubscribe();
+        this.subscription?.unsubscribe();
 
         if (this.toastTimeoutHandle) {
             clearTimeout(this.toastTimeoutHandle);
@@ -194,7 +229,22 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
      */
     setOverviewRange(range: string): void {
         this.activeOverviewRange = range;
+        this.selectedTimelinePoint = null;
         this.renderHealthTimeline();
+    }
+
+    /**
+     * Human label for the active overview range, used in the timeline subtitle so it
+     * reflects the selected 24h/7d/30d window instead of a hardcoded "Seven-day".
+     * @returns {string} e.g. "Last 24 hours" / "Last 7 days" / "Last 30 days"
+     */
+    get timelineRangeLabel(): string {
+        const labels: Record<string, string> = {
+            '24h': 'Last 24 hours',
+            '7d': 'Last 7 days',
+            '30d': 'Last 30 days',
+        };
+        return labels[this.activeOverviewRange] ?? this.activeOverviewRange;
     }
 
     /**
@@ -217,6 +267,9 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
 
     /** Provenance tooltip for the live-vs-placeholder dot on detail cards. */
     readonly sourceTip = buildSourceTip;
+
+    /** 13-11: source-dot legend rendered above the overview metrics. */
+    readonly sourceLegend = SOURCE_LEGEND;
 
     /** 12-x Recommendations: template-bound lookups exposed as field refs (no this). */
     readonly recCategory = REC_SIGNAL_CATEGORY;
@@ -308,14 +361,20 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Maturity score for the scorecard header before recommendations are generated.
-     * The detail view does not surface maturity, so it falls back to the loaded
-     * recommendations' currentScore (0 until first generation).
+     * Maturity score for the scorecard header. Falls back to the loaded recommendations'
+     * currentScore once Generate has been clicked; otherwise reads the deterministic score
+     * from the detail payload (present on load, no Generate needed).
      * @returns {number} Current maturity score (0–5).
      */
     get maturityScore(): number {
-        return this.recs?.currentScore ?? 0;
+        return this.recs?.currentScore ?? this.view?.maturity?.score ?? 0;
     }
+
+    /** 5-signal maturity breakdown segments (shared builder; identical to the portfolio table). */
+    readonly maturitySegments = buildMaturitySegments;
+
+    /** Overall maturity "X/5" score tooltip (shared builder). */
+    readonly maturityTooltip = buildMaturityScoreTooltip;
 
     /** Number of failing maturity signals = the count of generated actions. */
     get failingCount(): number {
@@ -419,6 +478,11 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         this.isLoading = true;
         this.loadError = '';
 
+        // Drop any prior app's on-demand recommendations so a switched app never shows stale recs.
+        this.recs = undefined;
+        this.recsGenerated = false;
+        this.recsError = '';
+
         this.dashboardService.getPortfolioAppDetail(id).subscribe({
             next: (detail) => {
                 this.view = detail.view;
@@ -446,15 +510,30 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
         this.healthTimelineLive = false;
         this.healthTimelineEmpty = false;
         this.syncedCardsReal = false;
+        this.syncedCardsError = false;
+        this.selectedTimelinePoint = null;
+        this.healthTimelineSnapshots = [];
 
         if (this.dataModeService.currentMode === 'demo') {
+            // Demo: keep the seeded showcase content; the dot reads "sample" (hollow grey) via syncedCardsLive.
+            this.syncedCardsLoading = false;
             return;
         }
 
+        // Real mode: clear the backend seed so fabricated-looking activity/events never flash under a
+        // "live" dot; show a loading state until the synced feed resolves.
+        this.view.activityLog = [];
+        this.view.healthEvents = [];
+        this.syncedCardsLoading = true;
+
         this.dashboardService.getHealthHistory(id).subscribe({
-            next: (history) => this.applyHealthTimeline(history.points),
+            next: (history) => {
+                this.syncedCardsLoading = false;
+                this.applyHealthTimeline(history.points);
+            },
             error: () => {
-                // Non-critical: leave the existing bars in place if history fails to load.
+                this.syncedCardsLoading = false;
+                this.syncedCardsError = true;
             },
         });
     }
@@ -475,12 +554,16 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
     /**
      * Renders the Health timeline row windowed to the active overview range (24h/7d/30d).
      * Re-runnable on range change without re-fetching (7-1).
+     * df-5: also builds healthTimelineSnapshots sorted ASC so bars[i] aligns with snapshots[i].
      */
     private renderHealthTimeline(): void {
+        this.selectedTimelinePoint = null;
+
         if (!this.healthSeries.length) {
             // Honest empty state: clear the seeded bars rather than imply false green.
             this.view.healthTimelineBars = [];
             this.view.timelineAxis = [];
+            this.healthTimelineSnapshots = [];
             this.healthTimelineLive = false;
             this.healthTimelineEmpty = true;
             return;
@@ -492,16 +575,49 @@ export default class DetailPageComponent implements OnInit, OnDestroy {
             // Snapshots exist, but none within the selected window — honest empty for this range.
             this.view.healthTimelineBars = [];
             this.view.timelineAxis = [];
+            this.healthTimelineSnapshots = [];
             this.healthTimelineLive = false;
             this.healthTimelineEmpty = true;
             return;
         }
 
-        const { bars, axis } = buildHealthTimeline(windowed);
+        // Sort ASC — same order buildHealthTimeline uses — so bars[i] aligns with snapshots[i].
+        const sorted = [...windowed].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+        this.healthTimelineSnapshots = sorted;
+
+        const { bars, axis } = buildHealthTimeline(sorted);
         this.view.healthTimelineBars = bars;
         this.view.timelineAxis = axis;
         this.healthTimelineLive = true;
         this.healthTimelineEmpty = false;
+    }
+
+    /**
+     * df-5: true when bar i is amber/red AND backed by a real live snapshot (not demo mode).
+     * Natural guard for demo mode: healthTimelineSnapshots is empty there so the check fails.
+     * @param {number} i Bar index in view.healthTimelineBars.
+     * @returns {boolean} whether clicking bar i should open the cause panel.
+     */
+    isTimelineBarDrillable(i: number): boolean {
+        const snap = this.healthTimelineSnapshots[i];
+        if (!snap) {
+            return false;
+        }
+        const tone = this.view?.healthTimelineBars[i];
+        return tone === 'a' || tone === 'r';
+    }
+
+    /**
+     * df-5: toggles the cause panel for bar i. Clicking the same bar again closes it.
+     * No-op when the bar is not drillable (green or demo mode).
+     * @param {number} i Bar index in view.healthTimelineBars.
+     */
+    onTimelineBarClick(i: number): void {
+        if (!this.isTimelineBarDrillable(i)) {
+            return;
+        }
+        const snap = this.healthTimelineSnapshots[i];
+        this.selectedTimelinePoint = this.selectedTimelinePoint === snap ? null : snap;
     }
 
     /**

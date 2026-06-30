@@ -14,6 +14,12 @@ export default interface HealthSnapshot {
     monitorCount: number;
     resolutionPath: 'primary' | 'fallback' | 'unmapped';
     recordedAt: string; // ISO timestamp of the Crawler run that produced this record
+    /**
+     * Per-monitor drill-down for the snapshot: the monitors whose status was not GREEN
+     * at the time of this run. Absent on snapshots recorded before this field was added
+     * (back-compatible). Used by the Combined Status Timeline bar drill-down (df-5).
+     */
+    failingMonitors?: { name: string; status: ApplicationStatus }[];
 }
 
 /**

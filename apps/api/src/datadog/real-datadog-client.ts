@@ -68,9 +68,13 @@ interface RawUptime {
  * limits. loadSnapshot collapses that to (monitor pages) + (SLO pages) + (3 history
  * calls per KEPT SLO), independent of the number of applications.
  *
- * NOTE: the SLO + history parsing follows the documented Datadog shapes but has NOT
- * been validated against a live response yet (no credentials available). Validate it
- * once real keys arrive; until then MockDatadogClient drives the PoC.
+ * NOTE: the SLO + history parsing was VALIDATED against a live Datadog response on
+ * 2026-06-29 (scripts/datadog-slo-probe.js): GET /api/v1/slo returns id/tags/
+ * thresholds[].target, GET /api/v1/slo/{id}/history returns data.overall.sli_value
+ * (a percentage), and errorBudgetRemainingPct computes to sane values. ~97% of SLOs
+ * carry app_short_key/app_service_id, so they join apps cleanly. The deployed dev pod
+ * still can't reach Datadog (egress, story 5-8), so this path only runs where there is
+ * egress (local / once 5-8 is unblocked).
  */
 @Injectable()
 export default class RealDatadogClient implements DatadogClient {

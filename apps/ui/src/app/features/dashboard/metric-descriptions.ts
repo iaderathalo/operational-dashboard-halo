@@ -41,7 +41,8 @@ export const METRIC_DESCRIPTIONS: Record<MetricKey, MetricDescription> = {
     },
     burnRate: {
         label: 'Burn Rate',
-        howCalculated: 'Error-budget consumption rate vs the 30-day SLO window (1.0x = on track)',
+        howCalculated:
+            'Error-budget consumption rate over the 30-day SLO window. Below 1.0x = burning within budget; 1.0x or higher = burning faster than allowed (budget runs out before the window ends).',
         source: 'Computed · Datadog SLO',
         meaning:
             'Above 1.0x means the budget is being consumed faster than allowed; above 2.0x is at-risk',
@@ -54,9 +55,11 @@ export const METRIC_DESCRIPTIONS: Record<MetricKey, MetricDescription> = {
     },
     errorBudget: {
         label: 'Error Budget',
-        howCalculated: 'Remaining error-budget minutes = (1 - slaTarget) × 30d × 60 × uptimePct',
-        source: 'Computed · Datadog SLO',
-        meaning: 'Time the app can be down this month before breaching its SLA',
+        howCalculated:
+            'Percent of the allowed downtime budget still unused: 100% = none spent, 0% = SLA breached',
+        source: 'Live · Datadog SLO',
+        meaning:
+            'How much room the app has left to be down this month before it breaks its uptime promise. The budget = 100% − SLA target (a 99.95% target allows ~0.05% downtime).',
     },
     healthTimeline: {
         label: 'Health Status Timeline',
@@ -67,9 +70,10 @@ export const METRIC_DESCRIPTIONS: Record<MetricKey, MetricDescription> = {
     uptimeBudget: {
         label: 'Uptime & Error Budget',
         howCalculated:
-            'SLO uptime % over trailing 30 days; error budget = (1 - slaTarget) × 30d × 60 × uptimePct',
+            '30-day SLO uptime %, plus the percent of the error budget still remaining (the allowed downtime budget = 100% − SLA target)',
         source: 'Live · Datadog SLO',
-        meaning: 'Below SLA target means the error budget is being consumed',
+        meaning:
+            'Uptime under the SLA target means the error budget is being spent; the burn rate shows how fast it is being consumed.',
     },
     monitors: {
         label: 'Datadog Monitors',

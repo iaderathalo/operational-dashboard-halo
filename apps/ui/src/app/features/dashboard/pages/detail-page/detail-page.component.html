@@ -54,6 +54,13 @@
 
         <div class="content">
             <div class="tab-panel" [class.active]="activeTab === 'overview'">
+                <div class="src-legend" role="note" aria-label="Data source key">
+                    <span class="src-legend-title">Data source:</span>
+                    <span class="src-legend-item" *ngFor="let item of sourceLegend">
+                        <span class="src-dot" [ngClass]="item.source"></span>
+                        {{ item.label }}
+                    </span>
+                </div>
                 <div class="metrics-row overview-metrics">
                     <div *ngFor="let metric of view.overviewMetrics" class="metric-card">
                         <div class="metric-label">
@@ -80,7 +87,10 @@
                     <div class="section-head">
                         <div>
                             <div class="card-title">Combined Status Timeline</div>
-                            <p>Seven-day health, perception, incidents, and user volume.</p>
+                            <p>
+                                {{ timelineRangeLabel }} — live health; perception, incidents and
+                                users are preview.
+                            </p>
                         </div>
                         <div class="range-toggle">
                             <button
@@ -111,13 +121,76 @@
                         <span class="timeline-label">Health</span>
                         <div class="timeline-bar">
                             <div
-                                *ngFor="let tone of view.healthTimelineBars"
+                                *ngFor="let tone of view.healthTimelineBars; let i = index"
                                 [ngClass]="'t-' + tone"
+                                [class.clickable]="isTimelineBarDrillable(i)"
+                                (click)="onTimelineBarClick(i)"
                             ></div>
                         </div>
                     </div>
-                    <div class="timeline-row">
-                        <span class="timeline-label">Perception</span>
+                    <div class="timeline-cause-panel" *ngIf="selectedTimelinePoint">
+                        <div class="timeline-cause-head">
+                            <span
+                                class="badge compact"
+                                [ngClass]="'b-' + selectedTimelinePoint.status.toLowerCase()"
+                            >
+                                <span class="dot"></span>
+                                {{ selectedTimelinePoint.status }}
+                            </span>
+                            <span class="timeline-cause-time">
+                                {{ selectedTimelinePoint.recordedAt | date: 'MMM d, yyyy HH:mm' }}
+                                UTC
+                            </span>
+                        </div>
+                        <div class="timeline-cause-meta">
+                            <span
+                                >Uptime:
+                                <strong>{{
+                                    selectedTimelinePoint.uptimePct != null
+                                        ? selectedTimelinePoint.uptimePct + '%'
+                                        : 'No data'
+                                }}</strong></span
+                            >
+                            <span
+                                >Monitors:
+                                <strong>{{ selectedTimelinePoint.monitorCount }}</strong></span
+                            >
+                            <span
+                                >Resolution:
+                                <strong>{{ selectedTimelinePoint.resolutionPath }}</strong></span
+                            >
+                        </div>
+                        <div class="timeline-cause-monitors">
+                            <div
+                                class="timeline-cause-note"
+                                *ngIf="selectedTimelinePoint.failingMonitors === undefined"
+                            >
+                                Monitor detail unavailable for this window (predates cause
+                                tracking).
+                            </div>
+                            <div
+                                class="timeline-cause-note"
+                                *ngIf="
+                                    selectedTimelinePoint.failingMonitors !== undefined &&
+                                    selectedTimelinePoint.failingMonitors.length === 0
+                                "
+                            >
+                                No failing monitors recorded — likely downtime/maintenance
+                                suppression.
+                            </div>
+                            <div
+                                *ngFor="let fm of selectedTimelinePoint.failingMonitors"
+                                class="timeline-cause-monitor-row"
+                            >
+                                <span class="mon-dot" [ngClass]="fm.status.toLowerCase()"></span>
+                                <span>{{ fm.name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="timeline-row preview">
+                        <span class="timeline-label"
+                            >Perception <span class="preview-tag">preview</span></span
+                        >
                         <div class="timeline-bar">
                             <div
                                 *ngFor="let tone of view.perceptionTimelineBars"
@@ -125,8 +198,10 @@
                             ></div>
                         </div>
                     </div>
-                    <div class="timeline-row">
-                        <span class="timeline-label">Incidents</span>
+                    <div class="timeline-row preview">
+                        <span class="timeline-label"
+                            >Incidents <span class="preview-tag">preview</span></span
+                        >
                         <div class="incident-lane">
                             <div
                                 *ngFor="let marker of view.timelineIncidents"
@@ -139,8 +214,10 @@
                             </div>
                         </div>
                     </div>
-                    <div class="timeline-row">
-                        <span class="timeline-label">Users</span>
+                    <div class="timeline-row preview">
+                        <span class="timeline-label"
+                            >Users <span class="preview-tag">preview</span></span
+                        >
                         <div class="user-bars">
                             <div
                                 *ngFor="let bar of view.userTimelineBars"
@@ -235,11 +312,11 @@
                             Recent Activity
                             <span
                                 class="src-dot"
-                                [class.placeholder]="!syncedCardsReal"
-                                [class.datadog]="syncedCardsReal"
+                                [class.placeholder]="!syncedCardsLive"
+                                [class.datadog]="syncedCardsLive"
                                 [attr.data-tip]="
                                     sourceTip(
-                                        syncedCardsReal ? 'datadog' : 'placeholder',
+                                        syncedCardsLive ? 'datadog' : 'placeholder',
                                         'Recent Activity'
                                     )
                                 "
@@ -251,8 +328,18 @@
                                 <span class="activity-time">{{ item.time }}</span>
                                 <span class="activity-text">{{ item.text }}</span>
                             </div>
+                            <div *ngIf="syncedCardsLoading" class="activity-item activity-empty">
+                                Loading recent activity…
+                            </div>
+                            <div *ngIf="syncedCardsError" class="activity-item activity-empty">
+                                Recent activity unavailable.
+                            </div>
                             <div
-                                *ngIf="syncedCardsReal && view.activityLog.length === 0"
+                                *ngIf="
+                                    !syncedCardsLoading &&
+                                    !syncedCardsError &&
+                                    view.activityLog.length === 0
+                                "
                                 class="activity-item activity-empty"
                             >
                                 No recent activity recorded yet.
@@ -302,8 +389,13 @@
                             </div>
                             <div>
                                 <span class="metric-caption">Error Budget</span>
-                                <strong>{{ view.errorBudget.remaining }}</strong>
-                                <small>of {{ view.errorBudget.total }} remaining</small>
+                                <strong
+                                    >{{ view.errorBudget.remaining
+                                    }}<span *ngIf="view.errorBudget.used"> remaining</span></strong
+                                >
+                                <small *ngIf="view.errorBudget.used"
+                                    >{{ view.errorBudget.used }} used</small
+                                >
                             </div>
                             <div>
                                 <span class="metric-caption">Burn Rate</span>
@@ -444,11 +536,11 @@
                         Recent Health Events
                         <span
                             class="src-dot"
-                            [class.placeholder]="!syncedCardsReal"
-                            [class.datadog]="syncedCardsReal"
+                            [class.placeholder]="!syncedCardsLive"
+                            [class.datadog]="syncedCardsLive"
                             [attr.data-tip]="
                                 sourceTip(
-                                    syncedCardsReal ? 'datadog' : 'placeholder',
+                                    syncedCardsLive ? 'datadog' : 'placeholder',
                                     'Recent Health Events'
                                 )
                             "
@@ -477,8 +569,18 @@
                                 </tr>
                             </tbody>
                         </table>
+                        <div *ngIf="syncedCardsLoading" class="table-empty">
+                            Loading status changes…
+                        </div>
+                        <div *ngIf="syncedCardsError" class="table-empty">
+                            Status changes unavailable.
+                        </div>
                         <div
-                            *ngIf="syncedCardsReal && view.healthEvents.length === 0"
+                            *ngIf="
+                                !syncedCardsLoading &&
+                                !syncedCardsError &&
+                                view.healthEvents.length === 0
+                            "
                             class="table-empty"
                         >
                             No status changes recorded yet.
@@ -1358,6 +1460,21 @@
                                 {{ recs?.notes || 'Turn the maturity gaps into grounded actions.' }}
                             </div>
                         </div>
+                    </div>
+                    <div class="mat-breakdown" *ngIf="view?.maturity || recs">
+                        <span
+                            *ngFor="let seg of maturitySegments(view?.maturity?.signals ?? null)"
+                            class="mat-seg prov-cell"
+                            title=""
+                            [ngClass]="seg.cls"
+                            [attr.data-prov]="seg.tip"
+                        ></span>
+                        <span
+                            class="mat-label prov-cell"
+                            title=""
+                            [attr.data-prov]="maturityTooltip({ score: maturityScore, max: 5 })"
+                            >{{ recs?.currentScore ?? maturityScore }}/5</span
+                        >
                     </div>
                     <div class="card-kicker rec-provenance" *ngIf="recsGenerated">
                         Suggested by assistant · mock LLM (deterministic) · based on sync

@@ -206,9 +206,10 @@
                             </div>
                         </div>
                         <div class="pf-risk-col" *ngIf="topRiskAppsCache.length">
-                            <h4>Worst apps</h4>
+                            <h4>Apps to review</h4>
                             <p class="pf-risk-note">
-                                Ranked by health severity, then error-budget burn rate.
+                                Monitored apps with degraded health or a fast-burning error budget,
+                                ranked by severity. Apps with no Datadog data are excluded.
                             </p>
                             <div
                                 class="pf-risk-row"

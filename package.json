@@ -59,7 +59,7 @@
         "@okta/okta-angular": "6.5.1",
         "@okta/okta-auth-js": "7.14.0",
         "ajv": "8.18.0",
-        "axios": "1.15.2",
+        "axios": "1.16.0",
         "class-transformer": "^0.5.1",
         "class-validator": "0.14.2",
         "cypress": "15.10.0",
@@ -143,7 +143,7 @@
         "picomatch@^4.0.0": "4.0.4",
         "shell-quote": "1.8.4",
         "@babel/runtime": "7.26.10",
-        "axios": "1.15.2",
+        "axios": "1.16.0",
         "serialize-error": "8.1.0",
         "undici": "6.27.0",
         "qs": "6.15.2"

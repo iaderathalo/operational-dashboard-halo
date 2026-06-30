@@ -6,6 +6,7 @@ import { OKTA_CONFIG, OktaAuthModule } from '@okta/okta-angular';
 import { queryForElement } from '@operational-dashboard/shared-utils-testing';
 
 import AppComponent from './app.component';
+import AppSearchComponent from './features/dashboard/components/app-search/app-search.component';
 import SharedModule from './shared/shared.module';
 
 describe('AppComponent', () => {
@@ -28,7 +29,13 @@ describe('AppComponent', () => {
         });
 
         await TestBed.configureTestingModule({
-            imports: [RouterTestingModule, OktaAuthModule, SharedModule, HttpClientTestingModule],
+            imports: [
+                RouterTestingModule,
+                OktaAuthModule,
+                SharedModule,
+                HttpClientTestingModule,
+                AppSearchComponent,
+            ],
             declarations: [AppComponent],
             providers: [{ provide: OKTA_CONFIG, useValue: { oktaAuth } }],
         }).compileComponents();

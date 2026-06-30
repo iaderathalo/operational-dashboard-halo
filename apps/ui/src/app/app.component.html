@@ -86,6 +86,8 @@
                     </div>
                 </div>
 
+                <polaris-app-search *ngIf="dataMode === 'real'"></polaris-app-search>
+
                 <div class="header-profile" (click)="$event.stopPropagation()">
                     <button
                         type="button"

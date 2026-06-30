@@ -1,6 +1,13 @@
 import { HealthSnapshot } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { buildActivityFeed, buildHealthEvents, buildHealthTimeline } from './detail-page.data';
+import {
+    buildActivityFeed,
+    buildHealthEvents,
+    buildHealthTimeline,
+    createDetailView,
+    createFallbackApp,
+} from './detail-page.data';
+import { PortfolioAppContext } from '../../models/portfolio.model';
 
 const snapshot = (
     recordedAt: string,
@@ -137,5 +144,47 @@ describe('buildActivityFeed', () => {
 
         expect(feed[0].text).toContain('not monitored');
         expect(feed[0].color).not.toBe('green');
+    });
+});
+
+describe('createDetailView — user-count resolution (df-6)', () => {
+    const baseApp = (overrides: Partial<PortfolioAppContext['app']>): PortfolioAppContext => ({
+        app: {
+            id: 'test-app',
+            name: 'Test App',
+            health: 'green',
+            perception: 'green',
+            uptime: 99.9,
+            users: 0,
+            totalInternalUsers: 0,
+            totalExternalUsers: 0,
+            activeUsers: null,
+            incidents: 0,
+            lastIncident: 'N/A',
+            ...overrides,
+        },
+        path: [],
+    });
+
+    it('shows activeUsers when present', () => {
+        const view = createDetailView(baseApp({ activeUsers: 500 }));
+        expect(view.activeUsers.value).toBe('500');
+    });
+
+    it('falls back to totalInternalUsers + totalExternalUsers when activeUsers is null', () => {
+        const view = createDetailView(
+            baseApp({ activeUsers: null, totalInternalUsers: 300, totalExternalUsers: 150 })
+        );
+        expect(view.activeUsers.value).toBe('450');
+    });
+
+    it('shows "No data" when activeUsers is null and both totals are 0 (fallback app)', () => {
+        const view = createDetailView({ app: createFallbackApp('x'), path: [] });
+        expect(view.activeUsers.value).toBe('No data');
+    });
+
+    it('shows "No data" when context is null', () => {
+        const view = createDetailView(null);
+        expect(view.activeUsers.value).toBe('No data');
     });
 });

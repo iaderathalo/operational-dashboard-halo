@@ -5,7 +5,7 @@ import {
     DigestSummary,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { PortfolioAppContext, PortfolioNode } from '../portfolio.model';
+import { PortfolioAppContext, PortfolioNode, PortfolioSearchResult } from '../portfolio.model';
 import { PortfolioRepository } from '../portfolio.repository';
 import createDashboardDetailResponse from '../seed/detail.seed';
 import SEED_PORTFOLIO from '../seed/portfolio.seed';
@@ -63,6 +63,42 @@ export default class InMemoryPortfolioRepository implements PortfolioRepository 
         const context = await this.getAppContext(appId);
 
         return context ? createDashboardDetailResponse(context) : null;
+    }
+
+    /**
+     * Searches seeded applications by name (seed data has no shortCode).
+     * Derives the health and hierarchy breadcrumb from the app and its tree path.
+     * @param {string} q - search query (minimum 3 characters for a result)
+     * @returns {Promise<PortfolioSearchResult[]>} rich matching results
+     */
+    async searchApps(q: string): Promise<PortfolioSearchResult[]> {
+        if (q.trim().length < 3) {
+            return [];
+        }
+        const term = q.trim().toLowerCase();
+        const results: PortfolioSearchResult[] = [];
+
+        const collectApps = (node: PortfolioNode): void => {
+            (node.apps || []).forEach((app) => {
+                if (app.name.toLowerCase().includes(term)) {
+                    const context = findAppContext(app.id, this.portfolio);
+                    const path = context?.path || [];
+                    results.push({
+                        id: app.id,
+                        name: app.name,
+                        shortCode: '',
+                        health: app.health,
+                        opCo: path[1]?.name || '',
+                        businessUnit: path[2]?.name || '',
+                        lob: path[3]?.name || '',
+                    });
+                }
+            });
+            (node.children || []).forEach(collectApps);
+        };
+
+        collectApps(this.portfolio);
+        return results.slice(0, 20);
     }
 
     /**

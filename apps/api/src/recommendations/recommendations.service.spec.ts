@@ -95,6 +95,9 @@ const createStubRepository = (initialApp: PortfolioApp | null): StubRepository =
         async getDigest(): Promise<never> {
             throw new Error('not used');
         },
+        async searchApps(): Promise<never[]> {
+            return [];
+        },
     };
 };
 

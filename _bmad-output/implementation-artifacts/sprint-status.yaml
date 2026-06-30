@@ -1,0 +1,477 @@
+# Sprint status — Operational Dashboard, Phase 1 (Live Health)
+# Source of truth for story state across sessions.
+# STATUS DEFINITIONS:
+#   backlog       - identified, not yet detailed into a story file
+#   blocked       - cannot start; see blocked_by
+#   ready-for-dev - story file written with full context, safe to implement
+#   in-progress   - implementation under way
+#   done          - implemented + tested + builds
+#
+# E1-S1..S6 implemented + VALIDATED LIVE on branch feature/datadog-live-health (commit fc8f6da):
+#   live run mapped 651 apps / 0 errors in ~157s over 3656 apps; Health + Uptime are live from
+#   Datadog for mapped apps (confirmed in demo on IntelliFy + HVCAP). The sync logic + internal
+#   token-guarded endpoint (POST /api/v1/internal/sync/datadog) live in apps/api and are validated.
+#   apps/crawler (the K8s CronJob auto-trigger) is BUILT but HELD OUT of the commit/branch pending
+#   Bernie's validation that a CronJob is the right approach; local-dev-only files are also excluded.
+# See _bmad-output/planning-artifacts/epics-stories/phase-1-backlog-2026-06-13.md
+# Phase-2 enrichment roadmap (was repo-root DATADOG-NEXT-STEPS.md, now folded into BMAD):
+#   _bmad-output/planning-artifacts/epics-stories/phase-2-datadog-enrichment-backlog-2026-06-18.md
+#   (epics E7-E9 -> epic-7/epic-8/epic-9 below). The source doc was archived to
+#   _bmad-output/planning-artifacts/research/datadog-enrichment-research-2026-06-16.md and removed from root.
+#
+# 2026-06-17 session (UX + dev-deploy push, branch feature/datadog-live-health):
+#   - Two-state missing-data model (UX research-backed): "Not monitored" (app not mapped in Datadog)
+#     vs "No data" (mapped, no value yet), replacing the ambiguous "Unavailable"/"Undefined". Tables
+#     show a muted "—" + provenance tooltip; detail shows the state + one-line reason. Driven by
+#     datadogMapped/resolutionPath. -> story 5-6 (done); refines 5-3 + E5-S7 + E2-S3.
+#   - "All / My Applications" scope toggle (header, real-data mode; ?scope=mine; disabled on detail).
+#     NEW scope from Raja's "remove the owner-only filter" decision. -> story 3-3 (done).
+#   - Dev deploy worked through 5-5: Vault gaps fixed (UI_OKTA_CONFIG_ANGULAR full object;
+#     API_MONGODB_API_DB_URL needs /operational-dashboardDev?authSource=admin), deploydb flag,
+#     INTERNAL_SYNC_TOKEN via config. NEW blocker: Wiz image-scan times out (PLATFORM-API 404
+#     "no scan results", 60-attempt limit) — intermittent/SecOps-side; data loaded manually meanwhile.
+
+# 2026-06-18 session (BMAD migration of the enrichment roadmap):
+#   - Folded repo-root DATADOG-NEXT-STEPS.md into BMAD. Reconciled finished items: the health timeline
+#     (5-4, commit 1421ef1), monitor drill-down (commit 8b81cef) and downtime suppression (commit 8b81cef)
+#     are DELIVERED -> see phase-1-backlog E5-S1/S2/S3. Drill-down + downtimes had no own keys here;
+#     they are recorded as done in the backlog and noted in epic-5 below.
+#   - Remaining enrichment re-expressed as Phase-2 epics E7-E9 (epic-7/epic-8/epic-9). The 24h/7d/30d
+#     timeline range-button wiring (previously untracked) is now 7-1.
+#   - DEPLOY UNBLOCKED: app deployed to dev + hosted link sent to the client (Wiz scan cleared) -> 5-5 done.
+#     Remaining thread: DB-migration step not re-verified on the latest deploy -> carved out as 5-7.
+
+# 2026-06-24 (Teams thread — Nemi/Anand/Raja, following the Bernie/Saule sync):
+#   - DEMO: Anand Sivaraman requested a feature demo/walkthrough; Raja scheduled it 2026-06-25 14:00-14:30 ET.
+#     Build is demoable (5-1/5-5 done). Prep a tight ~25-min script: live health + Datadog dual-tag bridge,
+#     OpCo->BU->LOB tree, maturity (7-2) + breakdown (13-6), top-risks roll-up (11-1), burn-rate (11-2),
+#     exec digest (11-4), maturity recommendations (12-2). Lead with provenance/two-state (5-3/5-6) for trust.
+#   - NEW WORKSTREAM -> epic-14: Anand directed Justin Ng to work with Raja + Iader to "incorporate the AI
+#     application metrics". Scope UNDEFINED -> discovery first. Start from the epic-12 PARK NO-GO findings.
+#   - DREMIO ACCESS (Nemi asked the process): self-minted personal Dremio PAT (Iader has dev+prod UI access);
+#     read-only SQL via REST (POST /api/v3/sql -> poll job -> page results) against CAI vwAllApplications_Latest;
+#     upsert by InternalID. Dedicated service token to replace the personal PAT is tracked as 10-3 (open).
+#   - ARCH DOC + FIREWALL: Nemi assigned the architecture documentation + firewall request to Anand Chand &
+#     Prashant Sinha -> feeds 5-8 (egress) + 10-3 (Dremio prod). Package our existing ADR + crawler design as the doc.
+#   - SERVICENOW ACCESS PATH: Nemi -> don't provision a standalone SN key; reach out to the DevOps team to follow the
+#     Unified Pipeline ServiceNow integration (UP auto-creates SN tickets on build/deploy) -> feeds 12-3.
+
+# 2026-06-25 (Teams thread + Raja's work-scope draft, morning of the demo):
+#   - ⚠️ DREMIO DECOMMISSION RISK (Justin Ng): "Dremio may be decommissioned later this year (no formal comms yet) —
+#     avoid building anything new against Dremio." -> PAUSE the 10-3 service-token chase; confirm w/ the Data team;
+#     identify the successor source for the CAI catalog. Our loader is source-agnostic (USE_REAL_PLANVIEW + upsert) so
+#     a swap is contained. Re-frames the Dremio access answer to Nemi (don't over-invest). See epic-10 / 10-3.
+#   - WORK-SCOPE DRAFT (Raja, with Anand): docs/Platform Dashboard_Work details_Draft.pdf reframes the dashboard into
+#     Epic 0 (service-tag foundation) + Epic 1 Reliability core / Epic 2 Service health matrix / Epic 3 DORA /
+#     Epic 4 Experience & depth / Epic 5 Cost. DRAFT/amendable, discussed at today's demo. Full gap-analysis vs our
+#     build -> _bmad-output/planning-artifacts/work-scope-reconciliation-2026-06-25.md. Key reconciliations:
+#       * Epic 0 = the ~0.1% `service`-tag gate we already measured (8-2/8-4) -> Epic 2 + APM parts of Epic 4 blocked.
+#       * Epic 1 incidents/MTTR (1.2/1.3) + Epic 3 DORA deploy events both need ServiceNow/Unified Pipeline -> 12-3 is
+#         now on the LEADERSHIP critical path, not just a card. Service-vs-application is the open unit-of-analysis call.
+#       * Strong matches already built: synthetics (4.2 = 12-4), monitor rollup/drill (1.4/2.4), error budget (1.1 = 11-2).
+#       * Our maturity/recommendations/roll-ups/digest/provenance + epic-14 AI metrics are NOT in the draft -> map them in.
+
+# 2026-06-25 (DEMO + pre-demo Paul sync — Anand/Raja/Justin/Paul; recording shared to Anton):
+#   DEMO WELL RECEIVED: "UI looks really good"; summary/top-risks/maturity "excellent"; recommendations "exactly
+#   what I need". Most feedback was about the DATA, not the UI.
+#   - DREMIO DECISION (Anand+Raja): PROCEED with Dremio FOR NOW; treat the decommission (EOY) + possible
+#     PlanView->ServiceNow migration as a FUTURE migration activity once direction is confirmed ("let the dust
+#     settle"). Supersedes the morning pause/over-invest framing -> see epic-10 / 10-3.
+#   - AI METRICS (epic-14) clarity (Paul, AI SME): Datadog surfaces token usage + $ cost OUT OF THE BOX (innovation-
+#     team setup) at APPLICATION-KEY level for any app hitting the Core API/OpenAI = quick win; per-FEATURE needs
+#     app-side callback integration. "Drift" -> rename "EVAL" (mostly evaluating OOTB models). LangSmith = non-prod
+#     only, prod approval pending. AI Tokens = GenAI FEATURE $ per app (NOT Copilot/dev usage); mock POC built by
+#     ANTON (Mercer, holds intent, back ~6/26). Define which catalog apps use AI. -> see epic-14.
+#   - PROCESS: backlog moves to ADO (Raja creates + shares link) = shared canonical; this file stays our working
+#     detail. Weekly review on Anton's existing touchpoint (no new call). Rami + Dan (AMS) validate direction
+#     periodically. Justin experiments on AI-app perf metrics w/ Iader. Mapping-rules Excel shared for validation.
+#   - DEMO FOLLOW-UPS (new backlog, also -> ADO): maturity shows 0/5 on entry until Generate (bug); dashboard-level
+#     app search (by app_short_key/name); error-budget definition unclear; "worst apps" relabel + filter no-data
+#     catalog apps; status-timeline amber/red cause drill-down; total internal/external users read as mock (reconcile
+#     vs PlanView + the mapping doc). -> see the demo-followups block below.
+
+last_updated: 2026-06-25
+
+development_status:
+  epic-1: in-progress            # Live Health Ingestion ("the Crawler")
+  1-1-application-health-data-model: done
+  1-2-health-snapshots-collection: done   # write path done (HealthSnapshot per app per sync, append-only)
+  1-3-datadog-client-service: done
+  1-4-datadog-sync-service: done          # PIVOTED to ONE bulk snapshot/sync (paginate ALL monitors + SLOs,
+                                          #   resolve SLO history under concurrency 6 + 429 backoff); per-app
+                                          #   resolution is purely local. Replaced the per-app fetch loop
+                                          #   (~1 monitor + 1 SLO + 3 history calls/app) that tripped Datadog 429s.
+  1-5-internal-sync-endpoint: done        # POST /api/v1/internal/sync/datadog, token-guarded, in apps/api
+  1-6-crawler-app: done                   # apps/crawler BUILT but HELD OUT of commit/branch pending Bernie
+  1-7-helm-cronjob-deploy: blocked        # needs dev cluster + Datadog key in Vault (Prashant/Nemi);
+                                          #   also awaiting Bernie's call on whether a CronJob is the right approach
+  1-8-dashboard-read-health: done         # DONE 2026-06-18 (Anand confirmed data flowing). Health + Uptime now live; the
+                                          #   live-vs-placeholder card pass (epic-5) + timeline read/render (FR-3)
+
+  epic-2: done                   # Application-to-Datadog Mapping (dual-tag bridge)
+  2-1-app-short-key-primary-bridge: done  # Datadog tag app_short_key == PlanView CAST key (== app shortCode)
+                                          #   is the PRIMARY per-app identifier; confirmed live in demo
+  2-2-app-service-id-fallback-bridge: done # FALLBACK tag app_service_id == PlanView ServiceNow key (SNSVC#######),
+                                          #   used because the ServiceNow key is often null. An exhaustive coverage
+                                          #   probe proved these two tags are the ONLY reliable per-app bridges
+                                          #   (service / business_unit / team / servicenow_chg are NOT).
+  2-3-surface-unmapped-apps: done         # DONE 2026-06-18: provenance + missing-data UI shipped (5-3/5-6). model carries datadogMapped / resolutionPath (primary|fallback|unmapped)
+                                          #   / lastSyncStatus / lastSyncAt; unmapped -> AMBER (never false green).
+                                          #   Provenance UI (legend + tooltip) folded into epic-5.
+
+  epic-3: in-progress            # Business-Unit Portfolio Tree
+  3-1-preserve-opco-and-portfolio-fields: done  # loader preserves PlanView OpCo + BusinessDeliveryPortfolioName.
+                                          #   The old "LOB-to-BU normalization mapping table" idea was killed.
+  3-2-bu-rooted-tree-reshape: done        # DONE 2026-06-16 (E3-S2 in phase-1-backlog); tracking was STALE, reconciled 2026-06-19.
+                                          #   Real-mode tree built OpCo -> BusinessDeliveryPortfolioName (Business Unit -> LOB) in
+                                          #   mongo-portfolio.repository.ts (buildPortfolio/buildOpCoNode/buildBusinessUnitNode/buildLobNode);
+                                          #   lobOf derives LOB from businessDeliveryPortfolio (part after " - "). Replaced old owner/person
+                                          #   grouping. NOTE: seed/demo path still uses the old person/role grouping (out of scope; real-mode only).
+  3-3-portfolio-scope-toggle: done        # NEW (Raja 2026-06-17): default shows ALL apps; "All / My Applications"
+                                          #   header toggle scopes to the signed-in owner via a ?scope=mine query param
+                                          #   (controller-resolved; service is pass-through). Disabled on the detail
+                                          #   view. Replaces the implicit owner-only filter. -> stories/3-3-portfolio-scope-toggle.md
+  3-4-tree-collapsed-by-default: done     # DONE 2026-06-18: initializeExpandedTreeNodes now expands root only (was root+2
+                                          #   levels) -> collapsed by default. Anand feedback 2026-06-18: the left Portfolio Tree defaulted to
+                                          #   EXPANDED; make it COLLAPSED by default. UI-only (expandedTreeNodes init
+                                          #   in portfolio-page.component.ts). -> stories/3-4-tree-collapsed-by-default.md
+  3-5-filter-bu-mercer-only: done         # DONE 2026-06-18: tree-build filter via env PORTFOLIO_OPCO_ALLOWLIST (comma-sep,
+                                          #   case-insensitive; empty=all). Default "Mercer" in dev-api.config (redeploy to
+                                          #   change — accepted). "Mercer" confirmed a real OpCo (CIS/Marsh/GuyCarpenter/MMC/
+                                          #   OliverWyman/Mercer). 150 api tests green. -> stories/3-5-filter-bu-mercer-only.md
+
+  epic-4: backlog                # User Perception — DISCOVERY only (perception is OUT of the Phase-1 build)
+  4-1-perception-discovery-sessions-raja: backlog  # re-confirmed OUT of scope with Raja 2026-06-16
+  4-2-perception-scenario-catalog: backlog  # technical path (still discovery): 3 RUM-free sources — APM trace.*
+                                          #   metrics / a log-based distribution metric / a multistep API Synthetic
+                                          #   test — feeding ONE baseline engine (current vs calendar_shift(-7d)
+                                          #   ratio + anomalies('agile',2)). Constraints: metrics retained 15mo;
+                                          #   /api/v1/query ~1600 req/h/org.
+
+  epic-5: in-progress            # Demo readiness + provenance (Raja sync 2026-06-16). DEMO scheduled 2026-06-25 14:00-14:30 ET (Anand req / Raja set up).
+  5-1-intellify-demoable-card: done       # DONE 2026-06-18: demo delivered, Anand saw it ("looking good, all data flowing"). Was: make IntelliFy the demoable proof
+                                          #   for the Anand meeting; pull more cards if possible, IntelliFy alone ok
+  5-2-live-vs-placeholder-cards: backlog  # in toPortfolioApp, Health + Uptime are LIVE; Perception ('undefined'),
+                                          #   Active Users (null), Incidents (0), Last Incident ('Undefined') are
+                                          #   hardcoded placeholders; Total Internal/External Users are real (PlanView).
+                                          #   Replace dummy cards with real Datadog data where available; drop/replace
+                                          #   ones we cannot source (e.g. total external users). Perception OUT.
+  5-3-provenance-ui: done                 # 2026-06-17: gray (.metric-muted) placeholders + provenance tooltip on
+                                          #   Health/Uptime, driven by datadogMapped / resolutionPath / lastSyncStatus
+                                          #   / lastSyncAt. A global legend was NOT added — folded into the per-cell
+                                          #   tooltip + the 5-6 two-state labels instead.
+  5-4-health-timeline-read-render: done   # FR-3 DELIVERED 2026-06-17 (commit 1421ef1): read endpoint
+                                          #   GET /dashboard/portfolio/apps/{id}/health-history + detail-page
+                                          #   HEALTH row renders from snapshots. Follow-up: 24h/7d/30d range
+                                          #   buttons not wired to the row -> Phase-2 story 7-1.
+  # Also delivered 2026-06-17 under epic-5 enrichment (tracked in phase-1-backlog E5-S2/S3, no own keys here):
+  #   - Monitor drill-down (Datadog Monitors card: state/name/message/last-triggered) -> commit 8b81cef.
+  #   - Downtime suppression (with_downtimes=true -> matching_downtimes; "Maintenance" badge; no false RED)
+  #     -> commit 8b81cef. (v2 Downtimes endpoint = 403 for this key; pivoted to the monitors-call flag.)
+  5-5-deploy-demoable-link: done          # DONE 2026-06-18: app DEPLOYED to dev via the unified pipeline and the
+                                          #   hosted link SENT to the client (no longer localhost). The earlier Wiz
+                                          #   image-scan timeout (PLATFORM-API 404 "no scan results") cleared.
+                                          #   Deploy mechanics: manual cicd.yml dispatch, deployToDev=true; Vault +
+                                          #   INTERNAL_SYNC_TOKEN sorted.
+                                          #   ⚠️ OPEN FOLLOW-UP -> story 5-7: the DB-migration step (deploydb flag,
+                                          #   db/1781100000000_index_applications_env_dev.ts) has NOT been re-verified
+                                          #   on the latest dev deploy (data was loaded manually before). Re-test that
+                                          #   the deploy runs migrations cleanly.
+  5-7-verify-deploy-db-migrations: backlog        # VERIFY (carved out of 5-5): confirm the dev deploy actually runs
+                                          #   the DB migrations (deploydb=true) end-to-end, not a manual data load.
+                                          #   Check the index_applications migration applies; capture the deploy log.
+                                          # MECHANISM (mapped 2026-06-19): there IS a dedicated job -> cicd.yml:113 `deploy_db`
+                                          #   uses mmctech/.../deployDB.yaml@v2.3; runs a K8s Job executing `npx mongo-migrate up`
+                                          #   (MONGO_DB_CMD in dev-db-execution.config). SEPARATE from the API deploy (deployDEV).
+                                          # WHY IT MAY NOT RUN — 4 AND-ed gates (cicd.yml:117-121); if any is false the job is
+                                          #   "skipped" (not failed): deployToDev|main/dev branch && runDatabase && dbChangeDetected && !isGitOps.
+                                          #   #1 suspect = dbChangeDetected: pipeline only runs migrations if the deployed commit touches db/.
+                                          #   The `sync vdi` commit DOES touch db/ (index migration) -> deploy FROM that commit should pass.
+                                          #   #2 = wrong workflow: deployGitOps.yml has deploy_db COMMENTED OUT (lines ~322-323) -> use cicd.yml.
+                                          #   #3 = no-op: mongo-migrate tracks a changelog; index migration is idempotent (createIndex no-op).
+                                          # CHECKLIST: (a) dispatch cicd.yml deployToDev=true from the db-touching commit; (b) confirm the
+                                          #   "Deploy DB to Dev" job is GREEN not skipped (GitHub Actions UI); (c) Job log shows mongo-migrate
+                                          #   applying + recording migrations; (d) if data was loaded manually, changelog may be empty so the
+                                          #   load migration (1781040600000_load_planview...) will run — confirm it's non-destructive (check-db-scripts gate).
+                                          # ROOT CAUSE FOUND (2026-06-22): deploy_db skipped because dbChangeDetected==FALSE on the runner.
+                                          #   Other 3 gates PASS (deployToDev✅; isGitOps=false✅ since deployDEV ran; runDatabase=true✅ via
+                                          #   deploy-config.json deploydb:true). The "Detect DB changes" step does `git diff --name-only HEAD^ HEAD`
+                                          #   on a SHALLOW checkout -> empty -> false (log shows db_changes_detected=*** which masks the word "false").
+                                          #   Locally that diff DOES include db/. Fix = add fetch-depth:0 to that step (like our check-db-scripts.yml)
+                                          #   -> escalate to Bernie/platform. Experiment first: commit a clean db/ change (git rm the stray compiled
+                                          #   db/1781040600000_..._dev.js) + re-dispatch. FULL FORENSICS -> stories/5-7-verify-deploy-db-migrations.md
+  5-6-missing-data-states: done           # NEW (2026-06-17, UX research-backed): "Not monitored" (app not mapped in
+                                          #   Datadog) vs "No data" (mapped, no value yet), replacing "Unavailable"/
+                                          #   "Undefined". Tables: muted "—" + tooltip; detail (overview + health):
+                                          #   state + one-line reason. Refines 5-2/E5-S7 + E2-S3.
+                                          #   -> stories/5-6-missing-data-states.md
+  5-8-deployed-api-datadog-egress: blocked  # ROOT CAUSE (2026-06-18, via scripts/datadog-logs-probe.js): the deployed
+                                          #   API pod CANNOT reach api.datadoghq.com -> every syncAll() Datadog call
+                                          #   times out at 10s / axios AggregateError -> POST /internal/sync/datadog
+                                          #   returns 500/504. 24h: 5 "sync triggered" / 0 "complete". Client has no
+                                          #   proxy; no HTTPS_PROXY in deploy config. Local works (has egress); pod
+                                          #   doesn't. Dev data was loaded MANUALLY (auto-sync never succeeded).
+                                          #   FIX = infra/egress (proxy / allowlist / Datadog PrivateLink), NOT app code.
+                                          #   blocked_by: DevOps egress path (Bernie/Saule); FIREWALL REQUEST owners = Anand Chand & Prashant
+                                          #   Sinha (Nemi 2026-06-24) — route the egress/allowlist request through them + hand over the arch doc.
+                                          #   -> stories/5-8-deployed-api-datadog-egress.md
+  5-9-async-sync-trigger: done         # robustness follow-up (NOT the 504 fix): endpoint returns 202 + runs syncAll
+                                          #   in background, with .catch (-> lastSyncStatus=error) + in-flight guard
+                                          #   (409 if running) + rely on idempotency. Secondary to 5-8.
+  5-10-api-health-ping-cleanup: done      # DONE 2026-06-18: isAPILive() now pings /health (1-line). CHORE (from Nemi's 401 report): app.component.ts:147
+                                          #   isAPILive() pings /tasks (behind global OktaGuard) -> 401 spam + retries
+                                          #   in console for ALL users (harmless: handler only reacts to net/500).
+                                          #   Fix = point it at the public /health (Terminus, @AllowControllerWithNoBearer).
+                                          #   1-line change. -> stories/5-10-api-health-ping-cleanup.md
+
+  # ---- PHASE 2: Datadog enrichment (folded in from DATADOG-NEXT-STEPS.md, 2026-06-18) ----
+  # Backlog: _bmad-output/planning-artifacts/epics-stories/phase-2-datadog-enrichment-backlog-2026-06-18.md
+  epic-7: in-progress            # Datadog signal depth (low-risk, no new integration)
+  7-1-health-timeline-range-buttons: done # DONE 2026-06-18: overview 24h/7d/30d buttons now re-window the Health row
+                                          #   (client-side; full series cached, windowByRange + renderHealthTimeline in
+                                          #   detail-page.component.ts; no backend change). Honest empty for an empty window.
+                                          #   Default = 7d (active button). finishes E5-S1. -> stories/7-1-health-timeline-range-buttons.md
+  7-2-maturity-scorecard: done            # DONE 2026-06-18: computeMaturity() in toPortfolioApp (mapped/has-monitor/
+                                          #   has-SLO/SLO-passing/has-owner) -> 0-5 score + signals; "Maturity" column
+                                          #   in the portfolio table w/ breakdown tooltip. 148 api tests green; live in payload.
+                                          #   was: derived score (has-monitor/has-SLO/SLO-passing/mapped, +has-owner
+                                          #   once 8-4). Pure local logic over synced data; no new Datadog call.
+                                          #   -> stories/7-2-maturity-scorecard.md
+  7-3-replace-placeholder-cells: backlog  # replace/drop remaining dummy Overview/table cells as sources land
+                                          #   (incidents <- 8-2, maturity <- 7-2); perception stays OUT until 9-3.
+                                          #   Continuation of E5-S7 / 5-2.
+
+  epic-8: backlog                # Catalog & incidents enrichment (entitlement / join gated -> spike first)
+  8-1-spike-incident-mgmt-entitlement: done  # DONE 2026-06-18 (scripts/datadog-catalog-incidents-probe.js): /api/v2/incidents
+                                          #   = 200, ENTITLED (unlike v2/downtime 403). Incidents have services+teams fields
+                                          #   but NO app_short_key -> join to apps only via `service` (messy bridge). Sample
+                                          #   incident from 2021 (stale) -> confirm recent/active incidents before 8-2.
+  8-2-incidents-api: backlog              # NO-GO as designed (join probe 2026-06-18, scripts/datadog-service-join-probe.js):
+                                          #   incidents map to apps only via `service`/`teams`, but only 0.1% of our apps'
+                                          #   monitors carry a `service` tag -> ~2/3656 joinable. PARKED unless app monitors
+                                          #   get tagged with `service` (org data-hygiene ask, not our code).
+  8-3-spike-service-tag-join: done        # DONE 2026-06-18: /api/v2/services/definitions = 200. Many services; `team`
+                                          #   populated 49/50 (OWNER available!), but contacts(Slack)/links = 0/50 (on-call/
+                                          #   links NOT populated in this org). Service names granular (abb_insert-oledb…) ->
+                                          #   `service`->app join still the gate. Quantify with scripts/datadog-key-coverage.js.
+  8-4-service-catalog: backlog            # NO-GO as designed (join probe 2026-06-18): app->service->definition(team) covers
+                                          #   2/3656 (0.1%) — 14,347 defs WITH teams exist but our app_short_key monitors
+                                          #   don't carry `service` tags, so unreachable. 7-2 has-owner uses PlanView owners
+                                          #   instead (already live). PARKED unless app monitors get `service` tags.
+
+  epic-9: backlog                # User Perception (RUM-free; continues/supersedes Phase-1 epic-4 discovery)
+  9-1-spike-perception-source: backlog    # DISCOVERY + read-only probe (with Raja): per-app source — APM trace.*
+                                          #   present? log duration field? else multistep API Synthetic. Business-
+                                          #   gated (needs Raja session). Gates 9-2.
+  9-2-baseline-engine: blocked            # one engine: current vs calendar_shift(-7d) ratio + anomalies('agile',2),
+                                          #   within 15mo retention / ~1600 req/h-org. blocked_by: 9-1.
+  9-3-perception-pill: blocked            # wire the green/amber/red perception pill (portfolio + detail) from the
+                                          #   engine; replaces the hardcoded 'undefined'. blocked_by: 9-2.
+
+  # ---- Live application catalog (Dremio) — from planview-data-source research 2026-06-18 ----
+  # Research: _bmad-output/planning-artifacts/research/planview-live-source-research-2026-06-18.md
+  epic-10: in-progress           # Replace the static Dremio CAI export (JSON) with a live data source — BUILD DELIVERED 2026-06-22 (commit 001010e); 10-3 app-token open (2026-06-24)
+                                          #   2026-06-25 DECISION (Anand+Raja, demo): PROCEED with Dremio FOR NOW; the decommission (EOY, no formal comms)
+                                          #   + possible PlanView->ServiceNow migration are a FUTURE migration activity once direction is confirmed ("let the
+                                          #   dust settle"). Loader is source-agnostic (USE_REAL_PLANVIEW + upsert) so a later swap stays contained to the client.
+                                          #   So: keep the current integration; don't heavily prod-harden until the target (ServiceNow vs PlanView-direct) is known.
+  10-1-spike-dremio-live-source: done  # DONE 2026-06-22 (Copilot in VDI, commit 001010e): spike folded into the build; live Dremio REST read shipped + diffed vs static JSON.
+                                          #   UNBLOCKED 2026-06-22: Iader has Dremio UI access (dev+prod) + can self-mint a PAT, so
+                                          #   discovery is self-service (view path/SQL/fields, software-vs-Cloud) and the PAT is the credential.
+                                          #   DELEGATED to GitHub Copilot in the VDI (Dremio only reachable there) — full spec: COPILOT-TASK-dremio.md.
+                                          #   Covers 10-1 spike (probe + diff vs static JSON) THEN 10-2 build (DremioPortfolioClient behind
+                                          #   USE_REAL_PLANVIEW, UPSERT-by-key so re-sync doesn't drop Datadog enrichment). Remaining for PROD only:
+                                          #   dedicated read-only service-user + pod egress/TLS (Bernie/platform) — NOT blocking the dev spike/build.
+                                          #   -> stories/10-1-spike-dremio-live-source.md
+  10-2-dremio-portfolio-client: done   # DONE 2026-06-22 (commit 001010e): DremioPortfolioClient (POST /api/v3/sql -> poll -> page, Bearer PAT)
+                                          #   behind USE_REAL_PLANVIEW; PlanviewSyncService UPSERTs by planviewInternalId (preserves Datadog
+                                          #   enrichment) + soft-deactivates apps gone from source (safety guard on empty/small fetch);
+                                          #   token-guarded POST /api/v1/internal/sync/planview. Unit tests green. PROD-only remaining
+                                          #   (external, NOT a dev blocker; cf 5-8): read-only service-user + pod egress/TLS to Dremio (Bernie/platform).
+                                          #   was BUILD: DremioPortfolioClient (REST POST /api/v3/sql + paging) behind a
+                                          #   USE_REAL_PLANVIEW-style flag; feed the existing loader (replace file-read only);
+                                          #   UPSERT-by-key (not deleteMany+insertMany) so a re-sync doesn't drop Datadog
+                                          #   enrichment. blocked_by: 10-1.
+  10-3-dremio-app-token: blocked        # ⏸️ DEPRIORITIZED 2026-06-25 (Anand+Raja: proceed with Dremio now, migration is a future activity) — the personal
+                                          #   PAT is fine for now; don't push hard for the dedicated service token until the source target is confirmed. Original intent below.
+                                          #   🔑 ACCESS (2026-06-24 Bernie/Saule sync): replace Iader's personal Dremio PAT with a dedicated read-only
+                                          #   APPLICATION/service token (client already takes a Bearer PAT) → Vault-wired so the PlanView sync runs as the
+                                          #   app, no manual local→dev DB copy. blocked_by: Mercer Dremio service account/token (push Nemi/Prashant; Bernie
+                                          #   helps w/ template). Pairs with 5-8 egress. -> stories/10-3-dremio-app-token.md
+
+  # ---- PHASE 2: Executive Value (from platform-enhancement research 2026-06-21) ----
+  # Backlog: _bmad-output/planning-artifacts/epics-stories/phase-2-exec-value-backlog-2026-06-21.md
+  # Research: _bmad-output/planning-artifacts/research/platform-enhancement-research-2026-06-21.md
+  # Turns per-app signals already synced into leadership-legible portfolio views. Exec-value-first.
+  epic-11: in-progress           # Executive Value (portfolio roll-up, reliability budget, predictive feed, adoption, rationalization).
+                                          #   11-1/11-2/11-4 APPLIED to feat/il/datadog-live-health 2026-06-22; nx build+test api/ui GREEN
+                                          #   DONE: committed 3bf5a3f + VALIDATED ON VDI 2026-06-22 (build+test api/ui green). Pending: product
+                                          #   sign-offs (healthy def / burn bands / top-risks order / digest channel). Pushed from VDI 2026-06-22; PR optional. See HANDOFF.md.
+  11-1-portfolio-risk-rollup: done             # ⚡ QUICK WIN. Aggregate health/coverage/SLO-passing/avg-maturity up the
+                                          #   OpCo->BU->LOB tree + "Top risks / where to look" panel. PURE LOCAL, no new Datadog
+                                          #   call. Substrate that 11-2/11-4 build on. -> stories/11-1-portfolio-risk-rollup.md
+  11-2-slo-error-budget-burn-rate: done        # 💎 Error budget remaining (errorBudgetRemainingPct already exists) + NEW burn-rate
+                                          #   (unitless, >1=trending to breach) surfaced + rolled up by BU. Local logic over synced
+                                          #   SLO data; rides the bulk pass. blocked_by 11-1 for the rollup only.
+                                          #   -> stories/11-2-slo-error-budget-burn-rate.md
+  11-3-watchdog-emerging-risk-feed: backlog      # SPIKE DONE 2026-06-22 = NO-GO on Watchdog: entitled (Events API source:watchdog) + high
+                                          #   volume, BUT app-join coverage ~0% (only ~2.4% of Watchdog events carry app_short_key; none match our
+                                          #   3656 apps). RESCOPED -> build the "what changed" feed from the E9 -7d anomaly engine (E9-S2) + monitor
+                                          #   state-change transitions (already joined on app_short_key); do NOT fork E9. Watchdog deferred (needs
+                                          #   upstream app_short_key tagging, Datadog-side). research/datadog-watchdog-spike-2026-06-22.md
+                                          #   -> stories/11-3-watchdog-emerging-risk-feed.md
+  11-4-exec-digest-shareable-snapshot: done    # ⚡ QUICK WIN (adoption). Scheduled weekly digest (score/coverage/top-movers/
+                                          #   new-risks) + read-only shareable snapshot. Reads our own store (11-1 rollup); no new
+                                          #   Datadog call. Freshness-honest (lastSyncStatus, cf. 5-8). -> stories/11-4-exec-digest-shareable-snapshot.md
+  11-5-time-rationalization-quadrant: backlog    # 🎯 BIGGER BET. Gartner TIME quadrant (Tolerate/Invest/Migrate/Eliminate):
+                                          #   technical fitness (health+maturity+SLO, in hand) x business value (PlanView attrs).
+                                          #   GATED on a leadership/Raja-agreed business-value axis. -> stories/11-5-time-rationalization-quadrant.md
+
+  # ---- PHASE 2: Card truth + maturity recommendations (from deep research 2026-06-23) ----
+  # Backlog: _bmad-output/planning-artifacts/epics-stories/phase-2-card-truth-and-recommendations-backlog-2026-06-23.md
+  # Research: _bmad-output/planning-artifacts/research/card-sourcing-and-maturity-recommendations-research-2026-06-23.md
+  # Replace mockup detail-page cards (detail-page.data.ts) with REAL per-app data where reachable + add an LLM
+  # recommendations tab. CENTRAL CONSTRAINT (Datadog primary docs): APM/incidents/service-defs join apps ONLY via
+  # `service` (~0.1% coverage); trace metrics carry only env/service/version/resource/http.status/host and SDK span
+  # tags can't become primary tags -> app_short_key NOT queryable on APM. What rides on app_short_key/app_service_id
+  # or our own synced store is feasible; the rest is parked behind the same tagging-hygiene ask as 8-2/8-4/11-3.
+  epic-12: in-progress           # Card Truth + Maturity Recommendations
+  12-1-synced-data-cards: done          # ⚡ QUICK WIN / GO-NOW (no dependency): Recent Health Events (diff consecutive
+                                          #   HealthSnapshot statuses, joined on app_short_key via buildHealthTimeline/FR-3) +
+                                          #   Recent Activity feed (from our own derived events). ~100% mapped-app coverage; no new
+                                          #   Datadog call. Promote to ready-for-dev on story-file write. -> stories/12-1-synced-data-cards.md
+  12-2-maturity-recommendations-llm: done  # 💎 PRIORITY FEATURE (product owner). LLM-on-demand "what's missing for maturity 5"
+                                          #   DONE 2026-06-24: provider-agnostic mock client + grounding validator + on-demand detail tab; lint-clean; synced to VDI. See [[maturity-recommendations-wip]].
+                                          #   tab: POST /dashboard/portfolio/apps/{id}/recommendations -> reuse computeMaturity to find
+                                          #   failing signals -> deterministic FACTS block -> Lenai gateway w/ STRICT JSON schema ->
+                                          #   reject+retry on hallucinated values -> cache by basedOnSyncAt (stale on next sync) +
+                                          #   rate-limit. Rides on ALREADY-SYNCED data; only the real gateway is external (stub until
+                                          #   Lenai wired). Signal->remediation map + UX spec in the backlog/research docs.
+                                          #   -> stories/12-2-maturity-recommendations-llm.md
+  12-3-servicenow-open-incidents: backlog  # 🟡 GO via ServiceNow (NOT Datadog: ~0.1% join; PagerDuty inherits the service gate).
+                                          #   SPIKE first: does app_service_id (== ServiceNow id, often null per 2-2) join incidents
+                                          #   above the 0.1% floor? -> then ServiceNow Table API client (GET /api/now/table/incident)
+                                          #   feeds the Incidents card in sync cadence. blocked_by: ServiceNow service account + API key + spike (2026-06-24 sync: Iader to pursue the key).
+                                          #   ACCESS PATH (Nemi 2026-06-24): don't provision a standalone SN key — reach out to the DevOps team to follow the
+                                          #   Unified Pipeline ServiceNow integration (UP auto-creates SN tickets on build/deploy) and reuse that approved path.
+                                          #   -> stories/12-3-servicenow-open-incidents.md
+  12-4-synthetics-health-checks: done   # 🟡 GO WITH WORK: Health Check Breakdown from Datadog Synthetics (GET /api/v1/synthetics/
+                                          #   tests + per-test results). PROBE first: key has synthetics_read? do synthetics carry
+                                          #   app_short_key? (records coverage %) -> then build, joined on app_short_key. -> stories/12-4-synthetics-health-checks.md
+  12-5-infra-cost-mtd: blocked             # 🟠 PARTIAL, tag-gated. Per-app MTD cost via AWS Cost Explorer GetCostAndUsage GroupBy=TAG
+                                          #   (or Datadog CCM cloud_cost + tag-enrichment). blocked_by: activate app_short_key as an AWS
+                                          #   cost-allocation tag (FinOps). Use grouped MTD, NOT GetCostAndUsageWithResources (EC2-only,
+                                          #   14-day). Bonus: cost-allocation tags backfill ~12mo retroactively. -> stories/12-5-infra-cost-mtd.md
+  12-6-recommendations-real-llm: backlog   # 🤖 FOLLOW-UP to 12-2 (done): swap the grounded MOCK for a REAL LLM (GPT/Copilot/Lenai) behind the existing
+                                          #   RECOMMENDATIONS_LLM_PROVIDER seam — same STRICT-JSON + grounding-validator contract, key via Vault, cache by
+                                          #   basedOnSyncAt, mock stays as fallback. blocked_by: LLM API access (2026-06-24 sync: Saule shares a Postman
+                                          #   collection/key for a POC; present the feature for formal access). -> stories/12-6-recommendations-real-llm.md
+  # PARK (NO-GO per-app, all blocked by the Datadog tagging-hygiene ask — revisit only if APM/monitors get service/
+  # app_short_key tags, or for self-instrumented AI apps). NOT carved as keys; tracked in the backlog doc:
+  #   - Response Time P50/P90/P99 (24h) + Error Rate (24h)  -> APM trace.* DDSketch, ~0.1% join (span tags != primary tags)
+  #   - AI Tokens per app  -> GitHub Copilot Metrics API is enterprise/org/team scope only, NO per-app/per-repo endpoint
+  #   - AI Drift per app   -> only registered models reporting drift tagged app_short_key (rare across 3656)
+  #   - Feature Health Summary -> no native per-feature Datadog construct; PARTIAL only if the app self-reports
+
+  # ---- PHASE 2: Dashboard trust, clarity & configurability (from the 2026-06-23 design review) ----
+  # Backlog: _bmad-output/planning-artifacts/epics-stories/phase-2-dashboard-trust-clarity-backlog-2026-06-23.md
+  # Source: 2026-06-23 design review. POLISH over existing real cards (not new sourcing).
+  # The 2026-06-23 review validated current direction (maturity 7-2, top-risks 11-1, two-state 5-6, provenance 5-3, Dremio e10, OpCo tree
+  # e3) and confirmed AI Tokens/Drift are undefined -> epic-12 NO-GO stands. New = trust/clarity/config improvements.
+  epic-13: in-progress           # Dashboard Trust, Clarity & Configurability
+  13-1-health-semantics-spike: backlog     # 🔬 SPIKE (analyze first, w/ Beacon: has DD monitoring + runs local). Our health
+                                          #   = worst-of monitor-state rollup (health-rollup.ts: GREEN = >=1 active monitor & all OK;
+                                          #   empty/all-downtime -> AMBER, never GREEN). RISK: GREEN depends on WHICH monitors exist; if
+                                          #   they don't probe availability, "all OK" != "app up" (false GREEN). Experiment: classify
+                                          #   Beacon's monitor types, hit its real /health (confirm "Commodore"?), force backend-down +
+                                          #   measure lag -> decide keep+tooltip / rename ("Monitoring Status") / add real health-check / both.
+                                          #   -> stories/13-1-health-semantics-spike.md
+  13-2-metric-description-tooltips: done # ⚡ QUICK WIN: hover tooltip on EVERY metric/card = how-calculated · source · meaning
+                                          #   (a common dashboard convention). One maintainable map; seeds 13-7.
+                                          #   -> stories/13-2-metric-description-tooltips.md
+  13-3-per-metric-thresholds: backlog      # 💎 colours green/amber/red driven by a threshold config PER METRIC (transversal across apps;
+                                          #   uptime global). Ex: AI-Tokens <40 green / 40-80 amber / >80 red. blocked_by: product band sign-off.
+                                          #   Ties into burn-rate bands (11-2). -> stories/13-3-per-metric-thresholds.md
+  13-4-metric-ia-grouping: done         # 💎 UX: group "App Monitoring" vs "App Perception" (super-tab/separator) + reorder Health 1st,
+                                          #   Maturity 2nd, Uptime 3rd, burn-rate; HIDE perception until defined (13-5). -> stories/13-4-metric-ia-grouping.md
+  13-5-nfr-tab-perception-clarification: blocked  # 🧭 what Anton calls "perception" (map/upload too slow) is really an NFR, not subjective
+                                          #   sentiment (Iader's understanding = user feedback correlated via LLM, epic-9). Decide which; if NFR,
+                                          #   tab w/ avg page-load + upload-time vs thresholds; eval Pendo overlap; educate Anton.
+                                          #   blocked_by: Anton + Raja decision. Refines epic-9. 2026-06-24 sync: Bernie/Saule AGREED it's an NFR (census-upload-time example), not sentiment; define metrics+KPIs w/ Raja/Anton. -> stories/13-5-nfr-tab-perception-clarification.md
+  13-6-maturity-breakdown-descriptive: done # ⚡ QUICK WIN: maturity cell/tooltip shows the 5 sub-signals (mapped/hasMonitor/hasSLO/
+                                          #   sloPassing/hasOwner) w/ state + meaning, not just "X/5". Reads computeMaturity signals; refines 7-2;
+                                          #   lightweight cousin of 12-2. -> stories/13-6-maturity-breakdown-descriptive.md
+  13-7-data-mapping-rules-doc: done     # 📄 DOC: living "Data Mapping Rules" — per card/screen: source service · data · calc (precompute
+                                          #   vs direct) · refresh cadence · API I/O (explicit ask from the review). Seed from epic-12 research + 13-2 map.
+                                          #   -> stories/13-7-data-mapping-rules-doc.md
+  13-8-query-perf-optimization: done    # ⚙️ PERF (DONE 2026-06-24): single-doc findOne per-app path, Mongo indexes (createIndex×4), projection + cache. Was: slow at 3656-app scale (surfaced in review). Profile portfolio/
+                                          #   detail queries; indexes/projection/pagination/caching; measure before/after. -> stories/13-8-query-perf-optimization.md
+  13-9-refresh-cadence: backlog            # ⏱️ OPS: today refresh is a MANUAL endpoint call. Define target cadence + freshness contract
+                                          #   (lastSyncAt) and wire to the auto-trigger (1-7 cronjob / 5-9 async); honest staleness (cf 5-8).
+                                          #   -> stories/13-9-refresh-cadence.md
+  13-10-preserve-nav-state: done        # ⚡ QUICK WIN: Back restores the previously selected app + open tab + filter/scroll context; this
+                                          #   came up repeatedly in review. Works with ?scope=. -> stories/13-10-preserve-nav-state.md
+  13-11-in-app-source-legend: backlog   # ⚡ QUICK WIN (UX/trust): a small visible legend for the source dots (● live · ○ sample) so a
+                                          #   non-technical/business reader gets "real vs sample data" WITHOUT opening docs/data-mapping-rules.md.
+                                          #   Highest-leverage half of 13-7's "make it understandable for business" ask. -> stories/13-11-in-app-source-legend.md
+  13-12-query-perf-round-2: backlog      # ⚙️ PERF ROUND 2. REVERTED to backlog 2026-06-25 after VDI explain() validation. KEY FINDING: the COLLATION approach is a DEAD END —
+                                          #   the planner ignores the collation email indexes (single-field AND compound); {active:{$ne:false}, $or:[email...]} still COLLSCANs ~3670 docs.
+                                          #   PROVEN FIX (explain: 3670→46 docs, IXSCAN/SUBPLAN, ~5ms): normalized lowercased field (itOwnerEmailLc/portfolioOwnerEmailLc) + PLAIN compound
+                                          #   index {…Lc:1, active:1} + restructure the $or so active:{$ne:false} is INSIDE each branch + plain equality (NO collation). 1185/3717 owner
+                                          #   emails are mixed-case → the *Lc field is REQUIRED (Mongo can't index toLower()). NO LONGER a Tier-0 quick win (needs sync-writer change +
+                                          #   backfill migration). {active:1,lastSyncAt:-1} covering idea still valid+independent. Full findings in the story. ORIGINAL PLAN (superseded):
+                                          #   collation-query fix (equality + .collation instead of $regex → uses the existing collation indexes →
+                                          #   COLLSCAN→IXSCAN on scope=mine); {active:1,lastSyncAt:-1} covering index so getMaxSyncAt is index-only
+                                          #   (keep the check, don't remove it); HTTP compression (5.8MB→~1.2MB). Tier1: denormalize derived fields
+                                          #   (maturityScore/burnRate/healthy/monitorsCount) at sync → getSummary/getDigest via $group aggregation; LRU
+                                          #   cache cap. Tier2 (gated on profiling/multi-pod): materialized portfolio_rollup ($merge), Redis, pool/projection
+                                          #   cleanups. Guardrails: identical shapes, owner-scope, OpCo allowlist, two-state health, maturity/burn outputs.
+                                          #   Source: scratchpad/performance-deep-research.md. -> stories/13-12-query-perf-round-2.md
+  # PARKED IDEAS (not committed): optimistic prefetching (preload on user interaction; speculative, revisit post-13-8);
+  #   extensible maturity signals (adding Copilot/cost changes the 0-5 scale -> deliberate product decision, not ad-hoc).
+
+  # ---- PHASE 2: AI Application Metrics (Anand Sivaraman directive 2026-06-24; Justin Ng + Raja + Iader) ----
+  # Anand directed Justin Ng to work with Raja + Iader to "incorporate the AI application metrics" into the dashboard.
+  # Scope is UNDEFINED -> discovery first. Prior research (epic-12 PARK + design-review findings, 13-x) found per-app AI metrics are NOT
+  # reachable at app grain via Datadog/Copilot: Copilot Metrics API = enterprise/org/team scope (no per-app/repo endpoint);
+  # AI drift only on the rare model tagged app_short_key. Justin likely owns a different source (internal AI platform).
+  epic-14: backlog               # AI Application Metrics (NEW, leadership-requested)
+  14-1-spike-ai-metrics-source-justin: backlog  # 🔬 DISCOVERY (with Justin Ng + Raja): WHAT "AI application metrics" means
+                                          #   (tokens? cost? adoption? quality/eval? drift?) and WHERE the data lives (Justin's AI platform vs
+                                          #   Datadog vs Copilot org API) + the per-app join key (app_short_key?). Gates everything downstream.
+                                          #   Start from the epic-12 PARK NO-GO findings so we don't re-probe Datadog. Owner: Justin Ng + Iader.
+  14-2-ai-metrics-cards: backlog          # BUILD (gated on 14-1): surface the agreed AI metrics per app (card + maybe a maturity signal),
+                                          #   honest-empty where unmapped, on the existing sync cadence. blocked_by: 14-1.
+  # 2026-06-25 UPDATE (demo + pre-demo Paul sync) — scope/source much clearer:
+  #   * TOKENS/COST reachable after all: Datadog surfaces token usage + $ cost OUT OF THE BOX (innovation-team setup)
+  #     for any app hitting the Core API/OpenAI, rolled up at APPLICATION-KEY level = the quick win. PER-FEATURE needs
+  #     app-side integration (Core API per-LLM-call callbacks reported so Datadog can ingest). Datadog = source-of-truth.
+  #     -> SUPERSEDES the "NO-GO via Datadog" header note above (that was the Copilot Metrics API; the innovation-team
+  #     Core-API rollup IS reachable at app-key grain). cf the card-sourcing research.
+  #   * "DRIFT" -> rename to "EVAL" (most cases = evaluating OOTB models, not drift/fine-tuning); true drift is deeper.
+  #     LangSmith = non-prod only, prod approval pending. AIGF (governance) accuracy is per-app/stakeholder-specific.
+  #   * AI Tokens = GenAI FEATURE consumption $ per app (~$0.25/recommendation), NOT Copilot/dev usage. Mock POC built
+  #     by ANTON (Mercer; holds the intent; back ~6/26). Define WHICH catalog apps use AI. Owners: Justin (experiment) + Anton + Paul (SME).
+
+  # ---- 2026-06-25 DEMO FOLLOW-UPS (raised in the Anand/Raja/Justin/Paul demo; triage into ADO) ----
+  df-1-maturity-score-on-entry: backlog       # 🐞 detail-page maturity shows 0/5 on ENTRY until "Generate" is hit (AutoChoice: 3/5 in
+                                          #   recommendations, 0/5 on load). Maturity is deterministic (computeMaturity) -> must render on load, decoupled
+                                          #   from the LLM/recommendations call. Investigate the detail-page maturity wiring + fix.
+  df-2-dashboard-app-search: backlog           # ⚡ FEATURE (Raja): search at dashboard level by app_short_key OR app name -> jump to the app without
+                                          #   knowing its portfolio (today you must find it in CAI first, then navigate OpCo->BU->LOB).
+  df-3-error-budget-definition: backlog        # 📄 CLARIFY: error budget (Datadog SLO) flagged "I don't know what that means" — define it, confirm the
+                                          #   Datadog config yields meaningful values, align the data-mapping-rules formula + the 13-2 tooltip. Ties to 11-2.
+  df-4-worst-apps-relabel-and-filter: backlog  # 🏷️ "worst apps" actually = insufficient DATA, not poor performance — relabel so it doesn't read as "bad
+                                          #   app", and filter out catalog apps with no Datadog data that pollute the list (Raja). Refines 11-1.
+  df-5-status-timeline-cause-drilldown: backlog # 🔎 30-day status timeline shows amber/red windows but no drill-down into the CAUSE — add it. Builds on 5-4/7-1.
+  df-6-users-real-vs-mock-reconcile: backlog   # 🔧 total internal/external users read as mock/empty in the demo, but the loader maps them from PlanView +
+                                          #   the mapping doc says "Real". Confirm whether values are actually populated; fix the doc or the source.
+# Key external unblockers to chase (carried from PRD Open Questions):
+#   - Deploy demoable link via Bernie / Polaris unified pipeline -> unblocks 5-5 (the Anand demo link)
+#   - Datadog API key in Vault for the deployed CronJob          -> Prashant/Nemi (unblocks 1-7)
+#   - Bernie's call on whether a K8s CronJob is the right auto-trigger -> unblocks 1-6 commit + 1-7
+#   - Beacon mapping: Beacon monitoring DOES exist -> coordinate with Juan for Beacon's app_short_key
+#   - Raja sessions for perception scenarios                     -> business (epic-4 is discovery only)
+# RESOLVED 2026-06-16: the applications<->Datadog mapping is the dual-tag bridge (app_short_key primary,
+#   app_service_id fallback), proven by an exhaustive coverage probe and confirmed live in the Raja demo;
+#   no manual/operator service-ID curation and no namespace/kube_namespace fallback are needed.

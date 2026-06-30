@@ -9,6 +9,7 @@ import {
     DashboardDetailPeople,
     DashboardDetailResponse,
     HealthHistoryResponse,
+    PortfolioSearchResult,
     RecommendationResult,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
@@ -205,6 +206,48 @@ export default class DashboardService {
         return this.http.get<RecommendationResult>(
             `${this.baseUrl}/dashboard/portfolio/apps/${encodeURIComponent(id)}/recommendations`,
             { params }
+        );
+    }
+
+    /**
+     * Searches portfolio applications by shortCode prefix or name for the
+     * dashboard typeahead. Respects the active All / My Applications scope
+     * unless `allScope` is true (used by the no-results "Search all" affordance).
+     * Demo mode filters the seeded tree by name and derives the hierarchy
+     * breadcrumb from the path returned by findAppContext (best-effort).
+     * @param {string} q - search term (minimum 3 characters for a result)
+     * @param {boolean} [allScope] - when true, bypass the current scope filter
+     * @returns {Observable<PortfolioSearchResult[]>} rich search results
+     */
+    searchApps(q: string, allScope = false): Observable<PortfolioSearchResult[]> {
+        if (this.dataModeService.currentMode === 'demo') {
+            if (q.trim().length < 3) {
+                return of([]);
+            }
+            const term = q.trim().toLowerCase();
+            const results = this.getAllDemoApps()
+                .filter((app) => app.name.toLowerCase().includes(term))
+                .slice(0, 20)
+                .map((app): PortfolioSearchResult => {
+                    const context = DashboardService.getDemoAppContext(app.id);
+                    const { path } = context;
+                    return {
+                        id: app.id,
+                        name: app.name,
+                        shortCode: '',
+                        health: app.health,
+                        opCo: path[1]?.name || '',
+                        businessUnit: path[2]?.name || '',
+                        lob: path[3]?.name || '',
+                    };
+                });
+            return of(results);
+        }
+
+        const scopeParam = allScope ? {} : this.scopeParams();
+        return this.http.get<PortfolioSearchResult[]>(
+            `${this.baseUrl}/dashboard/portfolio/search`,
+            { params: { q, ...scopeParam } }
         );
     }
 

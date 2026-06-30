@@ -9,7 +9,7 @@ import {
     SnapshotMetadata,
 } from '@operational-dashboard/shared-api-model/model/dashboard';
 
-import { PortfolioAppContext, PortfolioNode } from './portfolio.model';
+import { PortfolioAppContext, PortfolioNode, PortfolioSearchResult } from './portfolio.model';
 import { PortfolioRepository } from './portfolio.repository';
 import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
@@ -174,6 +174,19 @@ export default class DashboardService {
                 appCount: digest.rollup.appCount,
             },
         };
+    }
+
+    /**
+     * Searches portfolio applications by shortCode prefix or name for the
+     * dashboard typeahead. Queries are scoped to the OpCo allowlist and,
+     * when scope=mine, to the caller's owned apps. Returns [] for short queries.
+     * @param {string} q - search term (minimum 2 chars)
+     * @param {string} [userEmail] - optional email used to scope to owned apps
+     * @returns {Promise<PortfolioSearchResult[]>} slim search results, at most 20
+     */
+    async searchApps(q: string, userEmail?: string): Promise<PortfolioSearchResult[]> {
+        this.logger.info(`Searching portfolio apps for [${q}]`);
+        return this.portfolioRepository.searchApps(q, userEmail);
     }
 
     /**

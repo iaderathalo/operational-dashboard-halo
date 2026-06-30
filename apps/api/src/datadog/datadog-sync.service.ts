@@ -191,11 +191,15 @@ export default class DatadogSyncService {
             snapshot
         );
         const health = buildHealth(monitors, slo, resolutionPath);
+        const monitorBreakdown = buildMonitorBreakdown(monitors);
+        const failingMonitors = monitorBreakdown
+            .filter((m) => m.status !== 'GREEN')
+            .map((m) => ({ name: m.name, status: m.status }));
         const now = new Date().toISOString();
 
         await this.applicationsService.applyHealthUpdate(app, {
             ...health,
-            monitors: buildMonitorBreakdown(monitors),
+            monitors: monitorBreakdown,
             syntheticChecks: buildSyntheticBreakdown(synthetics),
             lastSyncAt: now,
             lastSyncStatus: resolutionPath === 'unmapped' ? 'unmapped' : 'ok',
@@ -209,6 +213,7 @@ export default class DatadogSyncService {
             monitorCount: monitors.length,
             resolutionPath,
             recordedAt: now,
+            failingMonitors,
         });
     }
 

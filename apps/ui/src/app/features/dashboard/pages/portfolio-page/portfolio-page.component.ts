@@ -3,6 +3,7 @@ import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { combineLatest, Subscription } from 'rxjs';
 
+import { buildMaturitySegments, buildMaturityScoreTooltip } from '../../maturity.util';
 import { METRIC_DESCRIPTIONS, formatMetricTooltip } from '../../metric-descriptions';
 import {
     PortfolioNode,
@@ -78,19 +79,7 @@ function buildUptimeProvenance(app: PortfolioApp): string {
     return `${staticDesc}\nLive · Datadog SLO${syncSuffix(app.lastSyncAt)}`;
 }
 
-const MATURITY_SIGNAL_KEY_ORDER: ReadonlyArray<
-    keyof NonNullable<PortfolioApp['maturity']>['signals']
-> = ['mapped', 'hasMonitor', 'hasSLO', 'sloPassing', 'hasOwner'];
-
-const MATURITY_SIGNAL_CALC: Record<string, string> = {
-    mapped: 'Linked to a Datadog service (the app carries a service tag).',
-    hasMonitor: 'At least one Datadog monitor watches that service.',
-    hasSLO: 'A 30-day SLO target is defined for the service.',
-    sloPassing: 'The 30-day uptime is meeting that SLO target.',
-    hasOwner: 'An IT, portfolio, or business owner is recorded.',
-};
-
-const HEALTH_RISK_WEIGHTS: Record<string, number> = { red: 3, amber: 2, undefined: 1 };
+const HEALTH_RISK_WEIGHTS: Record<string, number> = { red: 3, amber: 2 };
 
 const BURN_RISK_WEIGHTS: Record<string, number> = { 'at-risk': 2, 'fast-burn': 1 };
 
@@ -103,20 +92,6 @@ function appRisk(a: PortfolioApp): number {
     const health = HEALTH_RISK_WEIGHTS[a.health] ?? 0;
     const burn = BURN_RISK_WEIGHTS[a.burnRate?.band ?? ''] ?? 0;
     return health * 2 + burn;
-}
-
-/**
- * Overall maturity tooltip shown on the "X/5" score label: the score, the scoring rule,
- * and the data source. Per-signal detail lives on each indicator block.
- * @param {PortfolioApp} app - portfolio app
- * @returns {string} two-line score summary
- */
-function buildMaturityScoreTooltip(app: PortfolioApp): string {
-    const { maturity } = app;
-    const header = maturity
-        ? `Maturity ${maturity.score}/${maturity.max} · 1 point per signal met`
-        : 'Maturity · not scored yet';
-    return `${header}\nSource: Datadog + PlanView`;
 }
 
 const EMPTY_PORTFOLIO_NODE: PortfolioNode = {
@@ -184,14 +159,6 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         amber: 'AMBER',
         red: 'CRITICAL',
         undefined: 'Not monitored',
-    };
-
-    private readonly maturitySignalLabels: Record<string, string> = {
-        mapped: 'Mapped to Datadog',
-        hasMonitor: 'Has monitors',
-        hasSLO: 'Has SLO',
-        sloPassing: 'SLO passing',
-        hasOwner: 'Has owner',
     };
 
     private readonly burnRateBandLabels: Record<string, string> = {
@@ -375,6 +342,48 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Resolves the chain of nodes from the root down to the node that directly contains
+     * the given app id, so the sidebar tree can be expanded to reveal it (preserve-nav).
+     * @param {string} appId - application id to locate
+     * @param {object} node - current tree branch
+     * @param {object[]} path - accumulated node path
+     * @returns {object[] | null} node path to the app, or null when not found
+     */
+    findAppNodePath(
+        appId: string,
+        node: PortfolioNode = this.data,
+        path: PortfolioNode[] = []
+    ): PortfolioNode[] | null {
+        const here = [...path, node];
+        if ((node.apps || []).some((app) => app.id === appId)) {
+            return here;
+        }
+        return (
+            (node.children || [])
+                .map((child) => this.findAppNodePath(appId, child, here))
+                .find((childPath): childPath is PortfolioNode[] => childPath !== null) || null
+        );
+    }
+
+    /**
+     * Restores the table scroll offset after a node restore, once the view settles.
+     * @param {number} scrollTop - vertical offset to restore (no-op when <= 0).
+     * @returns {void}
+     */
+    // eslint-disable-next-line class-methods-use-this
+    private restoreScroll(scrollTop: number): void {
+        if (scrollTop <= 0) {
+            return;
+        }
+        setTimeout(() => {
+            const scrollEl = document.querySelector('.table-scroll');
+            if (scrollEl instanceof HTMLElement) {
+                scrollEl.scrollTop = scrollTop;
+            }
+        }, 0);
+    }
+
+    /**
      * Switches the active dashboard node.
      * @param {string} id - node id to activate
      */
@@ -462,6 +471,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
             new Set(this.expandedTreeNodes),
             new Set(this.expandedSections)
         );
+        this.navStateService.setLastAppId(app.id);
         this.router.navigate(['/dashboard/app', app.id], {
             queryParams: { from: this.currentNode.id },
         });
@@ -485,29 +495,11 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
         return this.perceptionLabels[status];
     }
 
-    /** Overall maturity tooltip for the "X/5" score label (delegates to a pure builder). */
+    /** Overall maturity "X/5" score-label tooltip (shared builder; pass app.maturity). */
     readonly maturityScoreTooltip = buildMaturityScoreTooltip;
 
-    /**
-     * Returns 5 segment descriptors for the maturity indicator. Each segment maps to
-     * a specific signal in `MATURITY_SIGNAL_KEY_ORDER` so position = criterion, not
-     * rank. The `cls` drives the fill; `tip` is that block's own `.prov-cell` tooltip
-     * — its state (✓/✗) + label on the first line and how it's calculated on the next.
-     * @param {PortfolioApp} app - portfolio app
-     * @returns {{ cls: string; tip: string }[]} 5 segment descriptors
-     */
-    maturitySegments(app: PortfolioApp): { cls: string; tip: string }[] {
-        const { maturity } = app;
-        return MATURITY_SIGNAL_KEY_ORDER.map((key) => {
-            const met = maturity ? maturity.signals[key] : false;
-            const label = this.maturitySignalLabels[key] ?? key;
-            const calc = MATURITY_SIGNAL_CALC[key] ?? '';
-            return {
-                cls: met ? 'mat-filled' : 'mat-empty',
-                tip: `${met ? '✓' : '✗'} ${label}\n${calc}`,
-            };
-        });
-    }
+    /** 5 maturity segment descriptors (cls + per-block `.prov-cell` tooltip); shared builder, pass signals. */
+    readonly maturitySegments = buildMaturitySegments;
 
     // 11-2 burn-rate (error-budget burn) ----------------------------------------
 
@@ -642,17 +634,24 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Up to five worst apps under the current node: RED/AMBER health or an at-risk
-     * burn rate, ordered by a documented health×2 + burn-band weighting.
-     * @returns {PortfolioApp[]} worst apps
+     * Up to five monitored apps to review (degraded health or fast-burning error budget)
+     * under the current node (excludes apps with no Datadog data): RED/AMBER health or an
+     * at-risk burn rate, ordered by a documented health×2 + burn-band weighting.
+     * @returns {PortfolioApp[]} monitored apps to review (degraded health or fast-burning error budget)
      */
     private computeTopRiskApps(): PortfolioApp[] {
-        return this.getAllApps(this.currentNode)
-            .filter(
-                (a) => a.health === 'red' || a.health === 'amber' || a.burnRate?.band === 'at-risk'
-            )
-            .sort((a, b) => appRisk(b) - appRisk(a))
-            .slice(0, 5);
+        return (
+            this.getAllApps(this.currentNode)
+                // df-4: exclude catalog apps with no Datadog data — they read AMBER only because
+                // they're unmapped (5-6), which is "no data", not "worst". Never list them as risky.
+                .filter((a) => a.datadogMapped !== false)
+                .filter(
+                    (a) =>
+                        a.health === 'red' || a.health === 'amber' || a.burnRate?.band === 'at-risk'
+                )
+                .sort((a, b) => appRisk(b) - appRisk(a))
+                .slice(0, 5)
+        );
     }
 
     /**
@@ -700,11 +699,27 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
                 const returnScrollTop = this.navStateService.getLastScrollTop();
                 const returnExpandedTree = this.navStateService.getLastExpandedTreeNodes();
                 const returnExpandedSections = this.navStateService.getLastExpandedSections();
+                const returnAppId = this.navStateService.getLastAppId();
                 this.navStateService.clearNodeContext();
 
-                if (returnNodeId && this.findNode(returnNodeId)) {
-                    // Restore tree/section expansion BEFORE navigateToNode so the sidebar
-                    // renders fully expanded when the view settles.
+                // Path to the app the user opened (from the right-side table OR the top-bar
+                // search). Expanding it keeps the sidebar open down to that app on return.
+                const appPath = returnAppId ? this.findAppNodePath(returnAppId) : null;
+
+                if (appPath && appPath.length > 0) {
+                    if (returnExpandedTree.size > 0) {
+                        this.expandedTreeNodes = returnExpandedTree;
+                    }
+                    appPath.forEach((pathNode) => this.expandedTreeNodes.add(pathNode.id));
+                    if (returnExpandedSections.size > 0) {
+                        this.expandedSections = returnExpandedSections;
+                    }
+                    // Land on the app's own node so it is highlighted + breadcrumbed with the
+                    // tree expanded down to it — consistent for the table, the "Apps to review"
+                    // panel, and the top-bar search (not just left open at the app's branch
+                    // while the selection/breadcrumb stay on the previous node).
+                    this.navigateToNode(appPath[appPath.length - 1].id);
+                } else if (returnNodeId && this.findNode(returnNodeId)) {
                     if (returnExpandedTree.size > 0) {
                         this.expandedTreeNodes = returnExpandedTree;
                     }
@@ -712,14 +727,7 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
                         this.expandedSections = returnExpandedSections;
                     }
                     this.navigateToNode(returnNodeId);
-                    if (returnScrollTop > 0) {
-                        setTimeout(() => {
-                            const scrollEl = document.querySelector('.table-scroll');
-                            if (scrollEl instanceof HTMLElement) {
-                                scrollEl.scrollTop = returnScrollTop;
-                            }
-                        }, 0);
-                    }
+                    this.restoreScroll(returnScrollTop);
                 } else {
                     this.navigateToNode(portfolio.id);
                 }

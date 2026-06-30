@@ -305,6 +305,13 @@ export interface DashboardDetailMaintenanceWindow {
     canCancel: boolean;
 }
 
+/** Detail-page maturity scorecard — the 5-signal breakdown sent to the UI. */
+export interface DashboardDetailMaturity {
+    score: number;
+    max: number;
+    signals: Record<string, boolean>;
+}
+
 export interface DashboardDetailView {
     name: string;
     businessUnit: string;
@@ -349,6 +356,7 @@ export interface DashboardDetailView {
     settings: DashboardDetailSettings;
     maintenanceWindows: DashboardDetailMaintenanceWindow[];
     overviewMetrics: DashboardDetailMetricCard[];
+    maturity?: DashboardDetailMaturity;
 }
 
 export interface DashboardDetailCurrentUser {

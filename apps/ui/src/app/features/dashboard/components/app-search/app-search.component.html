@@ -1,0 +1,103 @@
+<div class="app-search">
+    <!-- Live region — always in the DOM so AT picks up updates without re-registering -->
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {{ statusMessage }}
+    </div>
+
+    <input
+        class="app-search-input"
+        type="search"
+        role="combobox"
+        [value]="query"
+        [placeholder]="placeholder"
+        aria-label="Search applications"
+        [attr.aria-expanded]="isOpen"
+        aria-controls="app-search-listbox"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        [attr.aria-activedescendant]="activeIndex >= 0 ? 'app-search-opt-' + activeIndex : null"
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck="false"
+        (input)="onInput($event)"
+        (keydown)="onKeydown($event)"
+    />
+
+    <ul
+        *ngIf="isOpen"
+        id="app-search-listbox"
+        class="app-search-dropdown"
+        role="listbox"
+        aria-label="Application results"
+    >
+        <!-- Loading skeleton -->
+        <li *ngIf="loading" class="app-search-status" role="option" aria-disabled="true">
+            <span class="app-search-skeleton"></span>
+            <span class="app-search-skeleton app-search-skeleton--short"></span>
+        </li>
+
+        <!-- Error state -->
+        <li
+            *ngIf="!loading && error"
+            class="app-search-status app-search-status--error"
+            role="option"
+            aria-disabled="true"
+        >
+            Search unavailable — try refreshing
+        </li>
+
+        <!-- No-results state -->
+        <ng-container *ngIf="!loading && !error && results.length === 0">
+            <li
+                class="app-search-status app-search-status--empty"
+                role="option"
+                aria-disabled="true"
+            >
+                No applications match '{{ query.trim() }}'
+            </li>
+            <li
+                *ngIf="currentScope === 'mine'"
+                class="app-search-scope-hint"
+                role="option"
+                aria-disabled="true"
+            >
+                <button class="app-search-scope-btn" type="button" (mousedown)="searchAll()">
+                    Search all applications
+                </button>
+            </li>
+        </ng-container>
+
+        <!-- Results (capped at 8 via slice; server already limits to 20) -->
+        <li
+            *ngFor="let result of results | slice: 0 : 8; let i = index"
+            [id]="'app-search-opt-' + i"
+            class="app-search-result"
+            [class.active]="i === activeIndex"
+            role="option"
+            [attr.aria-selected]="i === activeIndex"
+            tabindex="-1"
+            (mousedown)="selectResult(result)"
+        >
+            <span
+                class="app-search-health-dot"
+                [attr.data-health]="result.health"
+                aria-hidden="true"
+            ></span>
+            <span class="app-search-body">
+                <span class="app-search-top-row">
+                    <span class="app-search-name">{{ result.name }}</span>
+                    <span class="app-search-key" *ngIf="result.shortCode">{{
+                        result.shortCode
+                    }}</span>
+                </span>
+                <span class="app-search-breadcrumb" *ngIf="result.opCo || result.businessUnit">
+                    {{ result.opCo
+                    }}<ng-container *ngIf="result.businessUnit">
+                        · {{ result.businessUnit }}</ng-container
+                    ><ng-container *ngIf="result.lob"> · {{ result.lob }}</ng-container>
+                </span>
+            </span>
+        </li>
+    </ul>
+</div>
