@@ -15,6 +15,9 @@ export type MetricKey =
     | 'healthTimeline'
     | 'uptimeBudget'
     | 'monitors'
+    | 'monitorRollup'
+    | 'sloRollup'
+    | 'syntheticRollup'
     | 'recentActivity'
     | 'recentHealthEvents'
     | 'healthCheckBreakdown'
@@ -82,6 +85,22 @@ export const METRIC_DESCRIPTIONS: Record<MetricKey, MetricDescription> = {
         meaning:
             'Each monitor reflects a real-time alert rule; red/amber means a condition is failing',
     },
+    monitorRollup: {
+        label: 'Monitors',
+        howCalculated:
+            'Count of Datadog monitors in each state across all apps in the selected portfolio node, aggregated client-side from the per-app monitor breakdown',
+        source: 'Live · Datadog',
+        meaning:
+            'No Data = a monitor exists but has no signal — it often means a silently-broken or misconfigured monitor',
+    },
+    sloRollup: {
+        label: 'SLO / Budget',
+        howCalculated:
+            'Classifies each app by error-budget remaining: Healthy (≥ 25%), At-risk (< 25%), Breaching (≤ 0%), No SLO (no SLO data joined). Aggregated client-side over the selected portfolio node.',
+        source: 'Live · Datadog SLO',
+        meaning:
+            'Shows how many apps are within their error budget, approaching exhaustion (< 25% remaining), already breached, or missing SLO data entirely',
+    },
     recentActivity: {
         label: 'Recent Activity',
         howCalculated:
@@ -103,7 +122,15 @@ export const METRIC_DESCRIPTIONS: Record<MetricKey, MetricDescription> = {
             'Datadog Synthetic tests linked to the app via app_short_key/app_service_id, each with its 30-day uptime; lowest-uptime first',
         source: 'Live · Datadog Synthetics',
         meaning:
-            'How the app’s synthetic checks (login flows, API probes) are doing; paused or no-data checks are flagged, never a false pass',
+            'How the app\u2019s synthetic checks (login flows, API probes) are doing; paused or no-data checks are flagged, never a false pass',
+    },
+    syntheticRollup: {
+        label: 'Synthetics',
+        howCalculated:
+            'Classifies each Datadog Synthetic check by 30-day uptime: Passing (\u2265 99%), Degraded (< 99%), No Data (null uptime), Paused (lifecycle paused). Aggregated client-side over the selected portfolio node.',
+        source: 'Live \u00b7 Datadog Synthetics',
+        meaning:
+            'Shows how many synthetic checks are healthy, underperforming, missing data, or intentionally paused across the portfolio scope',
     },
     recommendations: {
         label: 'Recommendations',

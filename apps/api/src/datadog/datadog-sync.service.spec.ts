@@ -1,5 +1,6 @@
 import { Logger } from '@mmctech-artifactory/polaris-logger';
 import { ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { mock, MockProxy } from 'jest-mock-extended';
 
 import { Application } from '@operational-dashboard/shared-api-model/model/dashboard';
@@ -45,6 +46,7 @@ describe('DatadogSyncService.syncAll', () => {
     let snapshot: MockProxy<DatadogSnapshot>;
     let applicationsService: MockProxy<ApplicationsService>;
     let snapshots: MockProxy<HealthSnapshotRepository>;
+    let configService: MockProxy<ConfigService>;
 
     const mappedApp = {
         id: 'a1',
@@ -65,13 +67,22 @@ describe('DatadogSyncService.syncAll', () => {
         snapshot = mock<DatadogSnapshot>();
         applicationsService = mock<ApplicationsService>();
         snapshots = mock<HealthSnapshotRepository>();
+        configService = mock<ConfigService>();
 
         datadog.loadSnapshot.mockResolvedValue(snapshot);
         // Default: nothing resolves. Individual tests opt specific tags in.
         snapshot.monitorsForTag.mockReturnValue([]);
         snapshot.sloSummaryForTag.mockReturnValue(null);
+        // Default: DATADOG_SITE unset, so syncOne falls back to datadoghq.com.
+        (configService.get as jest.Mock).mockReturnValue(undefined);
 
-        service = new DatadogSyncService(datadog, snapshots, applicationsService, mock<Logger>());
+        service = new DatadogSyncService(
+            datadog,
+            snapshots,
+            applicationsService,
+            mock<Logger>(),
+            configService
+        );
     });
 
     it('loads the snapshot exactly once for the whole fleet', async () => {
@@ -242,6 +253,58 @@ describe('DatadogSyncService.syncAll', () => {
             delete process.env.SYNC_APP_SHORTCODES;
         }
     });
+
+    // -----------------------------------------------------------------------
+    // US-2.4 — monitorUrl attached to each persisted monitor at sync time
+    // -----------------------------------------------------------------------
+    it('attaches a monitorUrl built from DATADOG_SITE to each persisted monitor', async () => {
+        applicationsService.findAll.mockResolvedValue([mappedApp]);
+        snapshot.monitorsForTag.mockImplementation((k, v) =>
+            k === 'app_short_key' && v === 'intellifi'
+                ? [monitor('Alert', 'Monitor A'), monitor('OK', 'Monitor B')]
+                : []
+        );
+        (configService.get as jest.Mock).mockReturnValue('datadoghq.eu');
+
+        await service.syncAll();
+
+        expect(applicationsService.applyHealthUpdate).toHaveBeenCalledWith(
+            mappedApp,
+            expect.objectContaining({
+                monitors: [
+                    expect.objectContaining({
+                        name: 'Monitor A',
+                        monitorUrl: 'https://app.datadoghq.eu/monitors/1',
+                    }),
+                    expect.objectContaining({
+                        name: 'Monitor B',
+                        monitorUrl: 'https://app.datadoghq.eu/monitors/1',
+                    }),
+                ],
+            })
+        );
+    });
+
+    it('falls back to datadoghq.com when DATADOG_SITE is unset', async () => {
+        applicationsService.findAll.mockResolvedValue([mappedApp]);
+        snapshot.monitorsForTag.mockImplementation((k, v) =>
+            k === 'app_short_key' && v === 'intellifi' ? [monitor('OK', 'Monitor A')] : []
+        );
+        // configService.get already defaults to undefined in beforeEach.
+
+        await service.syncAll();
+
+        expect(applicationsService.applyHealthUpdate).toHaveBeenCalledWith(
+            mappedApp,
+            expect.objectContaining({
+                monitors: [
+                    expect.objectContaining({
+                        monitorUrl: 'https://app.datadoghq.com/monitors/1',
+                    }),
+                ],
+            })
+        );
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -254,6 +317,7 @@ describe('DatadogSyncService.triggerSync', () => {
     let applicationsService: MockProxy<ApplicationsService>;
     let snapshots: MockProxy<HealthSnapshotRepository>;
     let logger: MockProxy<Logger>;
+    let configService: MockProxy<ConfigService>;
 
     beforeEach(() => {
         datadog = mock<DatadogClient>();
@@ -261,13 +325,21 @@ describe('DatadogSyncService.triggerSync', () => {
         applicationsService = mock<ApplicationsService>();
         snapshots = mock<HealthSnapshotRepository>();
         logger = mock<Logger>();
+        configService = mock<ConfigService>();
 
         datadog.loadSnapshot.mockResolvedValue(snapshot);
         snapshot.monitorsForTag.mockReturnValue([]);
         snapshot.sloSummaryForTag.mockReturnValue(null);
         applicationsService.findAll.mockResolvedValue([]);
+        (configService.get as jest.Mock).mockReturnValue(undefined);
 
-        service = new DatadogSyncService(datadog, snapshots, applicationsService, logger);
+        service = new DatadogSyncService(
+            datadog,
+            snapshots,
+            applicationsService,
+            logger,
+            configService
+        );
     });
 
     it('invokes syncAll once when triggered', async () => {

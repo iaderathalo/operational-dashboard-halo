@@ -237,6 +237,26 @@ development_status:
                                           #   was: derived score (has-monitor/has-SLO/SLO-passing/mapped, +has-owner
                                           #   once 8-4). Pure local logic over synced data; no new Datadog call.
                                           #   -> stories/7-2-maturity-scorecard.md
+  7-4-monitor-rollup-tile: done           # Estate-wide Monitors rollup tile (OK / Warn / Alert / No Data — No Data is
+                                          #   explicit, not collapsed into Warn) on the portfolio summary bar. CLIENT-SIDE
+                                          #   aggregation: buildMonitorRollup() in monitor-rollup.util.ts walks the portfolio
+                                          #   tree summing per-app ApplicationMonitor counts; monitorRollupCache populated in
+                                          #   recomputeTopRisks() (same caching pattern as topRiskAppsCache). ONE backend
+                                          #   change: datadogState preserved in health-rollup.ts buildMonitorBreakdown so the
+                                          #   Warn bucket is filled from the Datadog-native four-state value, not only from
+                                          #   the legacy GREEN/RED/AMBER status string. Legacy AMBER->noData fallback until
+                                          #   first post-deploy sync — acceptable transient (apps re-synced after deploy get
+                                          #   the correct bucket; pre-sync AMBER lands in No Data). 50-monitor/app cap
+                                          #   caveat: health-rollup.ts fetches up to 50 monitors per app; apps with >50 may
+                                          #   under-count. Reuses .pf-summary-stat card (no new visual language). US-2.4
+                                          #   drill into firing-monitors list deferred (TODO comment in template). ADO
+                                          #   US-1.4 #2698566 / Task #2708161. Verified Playwright/Chrome: tile rendered,
+                                          #   2 OK / 2 Warn / 1 Alert / 1 No Data — all 4 buckets visible; screenshots in
+                                          #   captures/2708161/. API 261 tests / 35 suites GREEN; UI 185 tests / 21 suites
+                                          #   GREEN. New: health-rollup.spec.ts +4 assertions (datadogState carry per bucket
+                                          #   Alert/OK/Warn/No Data); monitor-rollup.util.spec.ts 11 tests (empty apps,
+                                          #   empty monitors, each bucket, multi-app, legacy GREEN->ok / RED->alert /
+                                          #   AMBER->noData). -> stories/7-4-monitor-rollup-tile.md
   7-3-replace-placeholder-cells: backlog  # replace/drop remaining dummy Overview/table cells as sources land
                                           #   (incidents <- 8-2, maturity <- 7-2); perception stays OUT until 9-3.
                                           #   Continuation of E5-S7 / 5-2.

@@ -1,0 +1,69 @@
+@if (loadError) {
+    <div class="synth-state synth-state-error">{{ loadError }}</div>
+} @else if (isLoading) {
+    <div class="synth-state">Loading synthetics data...</div>
+} @else {
+    <div class="synth-screen">
+        <div class="synth-header">
+            <button type="button" class="back-link" (click)="goBack()">← Back to Dashboard</button>
+            <h1 class="page-title">Synthetic Journeys</h1>
+        </div>
+
+        <div class="incident-filters">
+            <label>
+                State
+                <select [(ngModel)]="stateFilter" (ngModelChange)="applyFilters()">
+                    <option value="">All</option>
+                    <option value="degraded">Degraded</option>
+                    <option value="passing">Passing</option>
+                    <option value="noData">No Data</option>
+                    <option value="paused">Paused</option>
+                </select>
+            </label>
+            <label *ngIf="checkTypes.length">
+                Type
+                <select [(ngModel)]="typeFilter" (ngModelChange)="applyFilters()">
+                    <option value="">All</option>
+                    <option *ngFor="let t of checkTypes" [value]="t">{{ t }}</option>
+                </select>
+            </label>
+        </div>
+
+        @if (filteredRows.length === 0) {
+            <div class="synth-empty">No synthetic checks match the current filters.</div>
+        } @else {
+            <div class="card">
+                <div class="table-scroll">
+                    <table class="synth-table">
+                        <thead>
+                            <tr>
+                                <th>Check</th>
+                                <th>Type</th>
+                                <th>App</th>
+                                <th>Status</th>
+                                <th>Uptime 30d</th>
+                                <th>State</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let row of filteredRows">
+                                <td>{{ row.name }}</td>
+                                <td>{{ row.type }}</td>
+                                <td>{{ row.appName }}</td>
+                                <td>{{ row.status }}</td>
+                                <td [ngClass]="stateClass(row.state)">
+                                    {{ formatPct(row.uptime) }}
+                                </td>
+                                <td>
+                                    <span class="state-badge" [ngClass]="stateClass(row.state)">
+                                        {{ stateLabel(row.state) }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}

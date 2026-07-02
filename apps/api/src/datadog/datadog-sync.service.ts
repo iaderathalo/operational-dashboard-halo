@@ -1,5 +1,6 @@
 import { Logger } from '@mmctech-artifactory/polaris-logger';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import { Application } from '@operational-dashboard/shared-api-model/model/dashboard';
 
@@ -10,7 +11,12 @@ import {
     DatadogSnapshot,
     DatadogSyntheticCheck,
 } from './datadog.types';
-import { buildHealth, buildMonitorBreakdown, buildSyntheticBreakdown } from './health-rollup';
+import {
+    buildHealth,
+    buildMonitorBreakdown,
+    buildMonitorUrl,
+    buildSyntheticBreakdown,
+} from './health-rollup';
 import ApplicationsService from '../applications/applications.service';
 import { HealthSnapshotRepository } from '../health-snapshots/health-snapshot.repository';
 
@@ -38,12 +44,14 @@ export default class DatadogSyncService {
      * @param snapshots - health-snapshot repository
      * @param applicationsService - application persistence service
      * @param logger - structured logger
+     * @param configService - app config, used to read DATADOG_SITE for monitor deep links (US-2.4)
      */
     constructor(
         @Inject('DatadogClient') private readonly datadog: DatadogClient,
         @Inject('HealthSnapshotRepository') private readonly snapshots: HealthSnapshotRepository,
         private readonly applicationsService: ApplicationsService,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private readonly configService: ConfigService
     ) {}
 
     /**
@@ -191,7 +199,11 @@ export default class DatadogSyncService {
             snapshot
         );
         const health = buildHealth(monitors, slo, resolutionPath);
-        const monitorBreakdown = buildMonitorBreakdown(monitors);
+        const site = this.configService.get<string>('DATADOG_SITE') || 'datadoghq.com';
+        const monitorBreakdown = buildMonitorBreakdown(monitors).map((m) => ({
+            ...m,
+            monitorUrl: buildMonitorUrl(site, m.id),
+        }));
         const failingMonitors = monitorBreakdown
             .filter((m) => m.status !== 'GREEN')
             .map((m) => ({ name: m.name, status: m.status }));

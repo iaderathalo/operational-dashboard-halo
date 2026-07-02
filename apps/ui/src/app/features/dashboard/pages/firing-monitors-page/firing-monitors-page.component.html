@@ -1,0 +1,165 @@
+@if (loadError) {
+    <div class="fm-state fm-state-error">{{ loadError }}</div>
+} @else if (isLoading) {
+    <div class="fm-state">Loading firing monitors…</div>
+} @else {
+    <div class="fm-screen">
+        <div class="fm-header">
+            <button type="button" class="back-link" (click)="goBack()">← Back to Portfolio</button>
+            <div class="fm-title">Firing Monitors</div>
+            <div class="fm-scope">Scope: {{ scopeName }}</div>
+        </div>
+
+        @if (allRows.length === 0) {
+            <div class="card fm-empty rec-all-passing">
+                <svg
+                    class="fm-empty-icon fm-empty-icon--ok"
+                    viewBox="0 0 24 24"
+                    width="44"
+                    height="44"
+                    fill="none"
+                    aria-hidden="true"
+                >
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" />
+                    <path
+                        d="M8 12.5l2.5 2.5 5-5.5"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <div class="fm-empty-title">All clear</div>
+                <div class="fm-empty-sub">0 monitors in Alert or Warn across {{ scopeName }}.</div>
+            </div>
+        } @else {
+            <div class="incident-filters">
+                <label class="filter-label" for="fm-service-filter">Service:</label>
+                <select
+                    id="fm-service-filter"
+                    class="filter-select"
+                    [(ngModel)]="serviceFilter"
+                    (change)="onFilterChange()"
+                >
+                    <option value="all">All services</option>
+                    <option *ngFor="let service of serviceOptions" [value]="service">
+                        {{ service }}
+                    </option>
+                </select>
+
+                <label class="filter-label" for="fm-state-filter">State:</label>
+                <select
+                    id="fm-state-filter"
+                    class="filter-select"
+                    [(ngModel)]="stateFilter"
+                    (change)="onFilterChange()"
+                >
+                    <option value="all">All firing (Alert + Warn)</option>
+                    <option value="alert">Alert only</option>
+                    <option value="warn">Warn only</option>
+                </select>
+            </div>
+
+            @if (filteredRows.length === 0) {
+                <div class="card fm-empty fm-no-results">
+                    <svg
+                        class="fm-empty-icon"
+                        viewBox="0 0 24 24"
+                        width="44"
+                        height="44"
+                        fill="none"
+                        aria-hidden="true"
+                    >
+                        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" />
+                        <line
+                            x1="16.5"
+                            y1="16.5"
+                            x2="21"
+                            y2="21"
+                            stroke="currentColor"
+                            stroke-width="1.6"
+                            stroke-linecap="round"
+                        />
+                        <line
+                            x1="8"
+                            y1="11"
+                            x2="14"
+                            y2="11"
+                            stroke="currentColor"
+                            stroke-width="1.6"
+                            stroke-linecap="round"
+                        />
+                    </svg>
+                    <div class="fm-empty-title">No monitors match these filters.</div>
+                    <div class="fm-empty-sub">Try a different service or state.</div>
+                    <button type="button" class="fm-empty-action" (click)="clearFilters()">
+                        Clear filters
+                    </button>
+                </div>
+            } @else {
+                <div class="card">
+                    <div class="table-scroll">
+                        <table class="ftable">
+                            <thead>
+                                <tr>
+                                    <th>Monitor</th>
+                                    <th>Severity</th>
+                                    <th>Service</th>
+                                    <th>Firing</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let row of filteredRows">
+                                    <td data-label="Monitor">
+                                        <a
+                                            *ngIf="row.monitorUrl; else noLink"
+                                            [href]="row.monitorUrl"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="mon-name fm-mon-link"
+                                        >
+                                            {{ row.name }}
+                                            <span aria-hidden="true">↗</span>
+                                            <span class="sr-only"
+                                                >(opens Datadog in a new tab)</span
+                                            >
+                                        </a>
+                                        <ng-template #noLink>
+                                            <span
+                                                class="mon-name metric-muted"
+                                                title="Deep link unavailable — resync required"
+                                            >
+                                                {{ row.name }}
+                                            </span>
+                                        </ng-template>
+                                    </td>
+                                    <td data-label="Severity">
+                                        <span
+                                            class="badge compact"
+                                            [ngClass]="row.state === 'alert' ? 'b-red' : 'b-amber'"
+                                        >
+                                            <span class="dot"></span>
+                                            {{ row.state === 'alert' ? 'Alert' : 'Warn' }}
+                                        </span>
+                                    </td>
+                                    <td data-label="Service">{{ row.service }}</td>
+                                    <td data-label="Firing" [title]="firingTooltip(row)">
+                                        <span [class.metric-muted]="!row.lastTriggeredAt">
+                                            {{ firingDuration(row) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="fm-footnote" *ngIf="noDataCount > 0">
+                        {{ noDataCount }}
+                        {{ noDataCount === 1 ? 'monitor' : 'monitors' }} reporting No Data
+                        {{ noDataCount === 1 ? 'is' : 'are' }} not shown here.
+                    </div>
+                </div>
+            }
+        }
+    </div>
+}

@@ -22,6 +22,7 @@ import {
     PortfolioAppContext,
     PortfolioNode,
 } from '../../models/portfolio.model';
+import { SYNTHETIC_GOOD_THRESHOLD } from '../../synthetic-rollup.util';
 
 /**
  * Shortens a raw synthetic test name for the Health Check Breakdown card: drops the
@@ -46,7 +47,7 @@ export function shortenSyntheticCheckName(name: string): string {
  */
 export function syntheticCheckTone(check: DashboardDetailHealthCheck): string {
     if (check.uptime == null) return 'hc-nodata';
-    return check.uptime >= 99 ? 'hc-good' : 'hc-warn';
+    return check.uptime >= SYNTHETIC_GOOD_THRESHOLD ? 'hc-good' : 'hc-warn';
 }
 
 export type DetailTabId =
@@ -306,11 +307,14 @@ const formatEventTime = (iso: string): string =>
 
 /**
  * Humanizes the gap between two ISO timestamps (time spent in the prior state).
+ * Also reused by the US-2.4 firing-monitors list for an open-ended "firing since"
+ * duration — call as `formatStateDuration(monitor.lastTriggeredAt, new
+ * Date().toISOString())`.
  * @param {string} fromIso Earlier timestamp.
  * @param {string} toIso Later timestamp.
  * @returns {string} Human-readable duration, or "—" when not derivable.
  */
-const formatStateDuration = (fromIso: string, toIso: string): string => {
+export const formatStateDuration = (fromIso: string, toIso: string): string => {
     const ms = Date.parse(toIso) - Date.parse(fromIso);
     if (!Number.isFinite(ms) || ms <= 0) {
         return '—';

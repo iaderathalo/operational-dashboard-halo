@@ -2,6 +2,7 @@ import { DatadogMonitor, DatadogMonitorState, DatadogSyntheticCheck } from './da
 import {
     buildHealth,
     buildMonitorBreakdown,
+    buildMonitorUrl,
     buildSyntheticBreakdown,
     rollupStatus,
 } from './health-rollup';
@@ -95,7 +96,7 @@ describe('buildHealth', () => {
 describe('buildMonitorBreakdown', () => {
     it('empty set -> []', () => expect(buildMonitorBreakdown([])).toEqual([]));
 
-    it('maps state->status, trims message, carries last-triggered', () => {
+    it('maps state->status, trims message, carries last-triggered, preserves datadogState', () => {
         const [m] = buildMonitorBreakdown([
             monRich({
                 id: 5,
@@ -109,10 +110,29 @@ describe('buildMonitorBreakdown', () => {
             id: 5,
             name: 'API',
             status: 'RED',
+            datadogState: 'Alert',
             message: 'boom',
             lastTriggeredAt: '2026-06-16T17:36:00Z',
             inMaintenance: false,
         });
+    });
+
+    it('carries datadogState OK for an OK monitor', () => {
+        const [m] = buildMonitorBreakdown([monRich({ overall_state: 'OK' })]);
+        expect(m.datadogState).toBe('OK');
+        expect(m.status).toBe('GREEN');
+    });
+
+    it('carries datadogState Warn for a Warn monitor', () => {
+        const [m] = buildMonitorBreakdown([monRich({ overall_state: 'Warn' })]);
+        expect(m.datadogState).toBe('Warn');
+        expect(m.status).toBe('AMBER');
+    });
+
+    it('carries datadogState No Data for a No Data monitor', () => {
+        const [m] = buildMonitorBreakdown([monRich({ overall_state: 'No Data' })]);
+        expect(m.datadogState).toBe('No Data');
+        expect(m.status).toBe('AMBER');
     });
 
     it('flags a monitor in an active downtime as inMaintenance', () => {
@@ -136,6 +156,64 @@ describe('buildMonitorBreakdown', () => {
             monRich({ name: 'a-ok', overall_state: 'OK' }),
         ]).map((m) => m.name);
         expect(names).toEqual(['a-alert', 'c-warn', 'a-ok', 'b-ok']);
+    });
+
+    // -------------------------------------------------------------------
+    // US-2.4 — service tag extraction
+    // -------------------------------------------------------------------
+    it('extracts a service: tag, preserving its original casing', () => {
+        const [m] = buildMonitorBreakdown([monRich({ tags: ['service:Auto-Choice-API'] })]);
+        expect(m.service).toBe('Auto-Choice-API');
+    });
+
+    it('matches the service: tag key case-insensitively', () => {
+        const [m] = buildMonitorBreakdown([monRich({ tags: ['Service:quote-svc'] })]);
+        expect(m.service).toBe('quote-svc');
+    });
+
+    it('sets service: undefined when no service: tag is present', () => {
+        const [m] = buildMonitorBreakdown([monRich({ tags: ['app_short_key:foo'] })]);
+        expect(m.service).toBeUndefined();
+    });
+
+    it('takes the first service: tag when multiple are present', () => {
+        const [m] = buildMonitorBreakdown([
+            monRich({ tags: ['service:first-svc', 'service:second-svc'] }),
+        ]);
+        expect(m.service).toBe('first-svc');
+    });
+
+    it('sets service: undefined (never throws) for an undefined tags array', () => {
+        const [m] = buildMonitorBreakdown([monRich({ tags: undefined as unknown as string[] })]);
+        expect(m.service).toBeUndefined();
+    });
+
+    it('sets service: undefined for an empty/valueless service: tag', () => {
+        const [m] = buildMonitorBreakdown([monRich({ tags: ['service:'] })]);
+        expect(m.service).toBeUndefined();
+    });
+});
+
+describe('buildMonitorUrl', () => {
+    it('builds a URL against the default datadoghq.com site', () => {
+        expect(buildMonitorUrl('datadoghq.com', 123)).toBe(
+            'https://app.datadoghq.com/monitors/123'
+        );
+    });
+
+    it('builds a URL against a custom site', () => {
+        expect(buildMonitorUrl('datadoghq.eu', 456)).toBe('https://app.datadoghq.eu/monitors/456');
+    });
+
+    it('uses the app. subdomain, not api.', () => {
+        expect(buildMonitorUrl('datadoghq.com', 1)).toContain('https://app.');
+        expect(buildMonitorUrl('datadoghq.com', 1)).not.toContain('https://api.');
+    });
+
+    it('interpolates the numeric monitor id verbatim', () => {
+        expect(buildMonitorUrl('datadoghq.com', 987654)).toBe(
+            'https://app.datadoghq.com/monitors/987654'
+        );
     });
 });
 

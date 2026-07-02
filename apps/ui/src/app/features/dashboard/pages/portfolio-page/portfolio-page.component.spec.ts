@@ -3,8 +3,19 @@
  * Heavy TestBed setup is avoided — methods are tested directly via a lightweight
  * partial-mock approach so the suite stays fast and dependency-free.
  */
-import { PortfolioApp } from '../../models/portfolio.model';
+import { ActivatedRoute, Router } from '@angular/router';
+import { mock, MockProxy } from 'jest-mock-extended';
+
+import PortfolioPageComponent from './portfolio-page.component';
+import { PortfolioApp, PortfolioNode } from '../../models/portfolio.model';
+import {
+    getAllApps as getAllAppsFromTree,
+    findNode as findNodeInTree,
+} from '../../portfolio-tree.util';
+import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 import DashboardNavStateService from '../../services/dashboard-nav-state.service';
+import DashboardScopeService from '../../services/dashboard-scope.service';
+import DashboardService from '../../services/dashboard.service';
 
 // ---------------------------------------------------------------------------
 // DashboardNavStateService — pure logic
@@ -307,5 +318,99 @@ describe('computeTopRiskApps (df-4)', () => {
         const result = computeTopRiskApps([unmapped, mapped]);
         expect(result).toHaveLength(1);
         expect(result[0].id).toBe('mapped');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// US-2.4: openFiringMonitors() — tile click wiring
+// A lightweight `new PortfolioPageComponent(...)` construction (no TestBed), matching
+// this file's stated dependency-free approach — the constructor is a plain class, and
+// none of the mocked collaborators need Angular's DI to behave correctly here.
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a component instance with every constructor dependency auto-mocked, so a
+ * single test can override only what it needs.
+ */
+function makeComponent(): {
+    component: PortfolioPageComponent;
+    router: MockProxy<Router>;
+    navStateService: MockProxy<DashboardNavStateService>;
+} {
+    const router = mock<Router>();
+    const navStateService = mock<DashboardNavStateService>();
+    const component = new PortfolioPageComponent(
+        router,
+        mock<ActivatedRoute>(),
+        mock<DashboardService>(),
+        mock<DashboardDataModeService>(),
+        mock<DashboardScopeService>(),
+        navStateService
+    );
+    return { component, router, navStateService };
+}
+
+describe('openFiringMonitors (US-2.4)', () => {
+    it('saves the current node context and navigates to /dashboard/monitors scoped to it', () => {
+        const { component, router, navStateService } = makeComponent();
+        component.currentNode = {
+            id: 'node-42',
+            name: 'Mercer',
+            role: '',
+            owner: '',
+            children: [],
+            apps: [],
+        };
+        component.expandedTreeNodes = new Set(['root', 'node-42']);
+        component.expandedSections = new Set(['sec-1']);
+
+        component.openFiringMonitors();
+
+        expect(navStateService.saveNodeContext).toHaveBeenCalledWith(
+            'node-42',
+            0,
+            new Set(['root', 'node-42']),
+            new Set(['sec-1'])
+        );
+        expect(router.navigate).toHaveBeenCalledWith(['/dashboard/monitors'], {
+            queryParams: { scope: 'node-42' },
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// US-2.4: getAllApps/findNode delegate to portfolio-tree.util — behavior-preserving
+// extraction. Confirms the component methods still produce identical results to the
+// pure utils they now wrap.
+// ---------------------------------------------------------------------------
+
+const makeNode = (overrides: Partial<PortfolioNode>): PortfolioNode => ({
+    id: 'root',
+    name: 'Root',
+    role: '',
+    owner: '',
+    children: [],
+    apps: [],
+    ...overrides,
+});
+
+describe('getAllApps/findNode delegation to portfolio-tree.util (US-2.4)', () => {
+    it('getAllApps matches the extracted util for a nested tree', () => {
+        const { component } = makeComponent();
+        const leafApp = makeApp({ id: 'app-1' });
+        const tree = makeNode({
+            children: [makeNode({ id: 'child', apps: [leafApp] })],
+        });
+
+        expect(component.getAllApps(tree)).toEqual(getAllAppsFromTree(tree));
+        expect(component.getAllApps(tree)).toEqual([leafApp]);
+    });
+
+    it('findNode matches the extracted util, including the not-found case', () => {
+        const { component } = makeComponent();
+        const tree = makeNode({ children: [makeNode({ id: 'child' })] });
+
+        expect(component.findNode('child', tree)).toEqual(findNodeInTree('child', tree));
+        expect(component.findNode('missing', tree)).toBeNull();
     });
 });

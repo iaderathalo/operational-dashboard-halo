@@ -6,6 +6,7 @@ import {
     buildHealthTimeline,
     createDetailView,
     createFallbackApp,
+    formatStateDuration,
 } from './detail-page.data';
 import { PortfolioAppContext } from '../../models/portfolio.model';
 
@@ -102,6 +103,28 @@ describe('buildHealthEvents', () => {
         ]);
 
         expect(events[0].toLabel).toBe('Amber');
+    });
+});
+
+describe('formatStateDuration (US-2.4: exported for the open-ended "firing since" use)', () => {
+    it('formats an open-ended "since now" gap under an hour as "N min"', () => {
+        const fromIso = new Date(Date.now() - 45 * 60000).toISOString();
+        expect(formatStateDuration(fromIso, new Date().toISOString())).toBe('45 min');
+    });
+
+    it('formats an open-ended "since now" gap of a few hours as "XhYm"', () => {
+        const fromIso = new Date(Date.now() - (3 * 60 + 4) * 60000).toISOString();
+        expect(formatStateDuration(fromIso, new Date().toISOString())).toBe('3h 4m');
+    });
+
+    it('returns "—" when toIso is before fromIso', () => {
+        expect(formatStateDuration('2026-06-16T12:00:00.000Z', '2026-06-16T09:00:00.000Z')).toBe(
+            '—'
+        );
+    });
+
+    it('returns "—" for an unparsable timestamp', () => {
+        expect(formatStateDuration('not-a-date', new Date().toISOString())).toBe('—');
     });
 });
 

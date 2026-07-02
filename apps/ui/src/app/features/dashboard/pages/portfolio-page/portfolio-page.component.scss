@@ -361,6 +361,23 @@
     min-width: 160px;
     flex: 1;
 
+    &--clickable {
+        cursor: pointer;
+        transition:
+            box-shadow 0.15s,
+            background 0.15s;
+
+        &:hover {
+            box-shadow: var(--shadow-lg);
+            background: var(--accent-light);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+    }
+
     .label {
         font-size: 11px;
         text-transform: uppercase;
@@ -404,6 +421,26 @@
         .u {
             color: var(--grey);
         }
+
+        .paused-count {
+            color: var(--grey);
+            opacity: 0.7;
+        }
+    }
+}
+
+// US-2.4: the Monitors tile drills into the firing-monitors list — same clickable
+// treatment as .pf-risk-row, the existing precedent for a clickable summary row.
+.pf-summary-stat--clickable {
+    cursor: pointer;
+
+    &:hover {
+        background: var(--bg);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
 }
 

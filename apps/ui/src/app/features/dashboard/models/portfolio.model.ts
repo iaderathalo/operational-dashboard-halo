@@ -1,3 +1,10 @@
+import {
+    ApplicationMonitor,
+    ApplicationSyntheticCheck,
+} from '@operational-dashboard/shared-api-model/model/dashboard';
+
+export { ApplicationMonitor, ApplicationSyntheticCheck };
+
 export interface PortfolioNode {
     id: string;
     name: string;
@@ -28,6 +35,8 @@ export interface PortfolioApp {
     lastIncident: string;
     maturity?: AppMaturity;
     burnRate?: AppBurnRate; // 11-2
+    monitors?: ApplicationMonitor[]; // US-1.4
+    syntheticChecks?: ApplicationSyntheticCheck[]; // US-4.2
 }
 
 export interface AppMaturity {

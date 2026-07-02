@@ -141,6 +141,59 @@
                             >
                         </div>
                     </div>
+                    <div
+                        class="pf-summary-stat pf-summary-stat--clickable"
+                        [title]="monitorRollupTooltip"
+                        role="button"
+                        tabindex="0"
+                        (click)="openFiringMonitors()"
+                        (keydown.enter)="openFiringMonitors()"
+                    >
+                        <span class="label">Monitors</span>
+                        <div class="breakdown">
+                            <span class="g">{{ monitorRollupCache.ok }} OK</span>
+                            <span class="a">{{ monitorRollupCache.warn }} Warn</span>
+                            <span class="r">{{ monitorRollupCache.alert }} Alert</span>
+                            <span class="u">{{ monitorRollupCache.noData }} No Data</span>
+                        </div>
+                    </div>
+                  
+                  <div
+                        class="pf-summary-stat pf-summary-stat--clickable"
+                        role="button"
+                        tabindex="0"
+                        (click)="openSloBudget()"
+                        (keydown.enter)="openSloBudget()"
+                        [title]="sloRollupTooltip"
+                    >
+                        <span class="label">SLO / Budget</span>
+                        <div class="breakdown">
+                            <span class="g">{{ sloRollupCache.healthy }} OK</span>
+                            <span class="a">{{ sloRollupCache.atRisk }} Risk</span>
+                            <span class="r">{{ sloRollupCache.breaching }} Breach</span>
+                            <span class="u">{{ sloRollupCache.noSlo }} No SLO</span>
+                        </div>
+                    </div>
+                  
+                    <div
+                        class="pf-summary-stat pf-summary-stat--clickable"
+                        role="button"
+                        tabindex="0"
+                        (click)="openSynthetics()"
+                        (keydown.enter)="openSynthetics()"
+                        [title]="syntheticRollupTooltip"
+                    >
+                        <span class="label">Synthetics</span>
+                        <div class="breakdown">
+                            <span class="g">{{ syntheticRollupCache.passing }} OK</span>
+                            <span class="a">{{ syntheticRollupCache.degraded }} Degr</span>
+                            <span class="u">{{ syntheticRollupCache.noData }} No Data</span>
+                            <span class="paused-count"
+                                >{{ syntheticRollupCache.paused }} Paused</span
+                            >
+                        </div>
+                    </div>
+                  
                     <div class="pf-summary-stat" *ngIf="!placeholderColumns.perception">
                         <span class="label">User Perception</span>
                         <div class="breakdown">

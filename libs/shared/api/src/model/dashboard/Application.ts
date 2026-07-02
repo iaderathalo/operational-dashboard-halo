@@ -1,6 +1,9 @@
 export type ApplicationStatus = 'GREEN' | 'AMBER' | 'RED';
 export type ApplicationEnvironment = 'PRODUCTION' | 'STAGING' | 'DEVELOPMENT';
 
+/** Raw 4-state Datadog monitor state, preserved before the 3-way status collapse. */
+export type MonitorState = 'OK' | 'Warn' | 'Alert' | 'No Data';
+
 /**
  * Per-monitor drill-down for an Application (#2). One entry per Datadog monitor the
  * Crawler resolved for the app — the "why" behind the rolled-up Health status.
@@ -9,9 +12,15 @@ export interface ApplicationMonitor {
     id: number;
     name: string;
     status: ApplicationStatus;
+    /** Raw 4-state Datadog value before the 3-way status collapse (US-1.4). */
+    datadogState?: MonitorState;
     message: string;
     lastTriggeredAt: string | null;
     inMaintenance: boolean;
+    /** US-2.4: the monitor's `service:` tag value, verbatim casing. Absent when untagged. */
+    service?: string;
+    /** US-2.4: deep link to the monitor's Datadog page, e.g. https://app.<site>/monitors/<id>. */
+    monitorUrl?: string;
 }
 
 /**

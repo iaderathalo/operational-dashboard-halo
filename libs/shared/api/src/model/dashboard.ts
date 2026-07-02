@@ -6,6 +6,7 @@ import Application, {
     ApplicationSyntheticCheck,
     ApplicationStatus,
     ApplicationEnvironment,
+    MonitorState,
     StatusOverride,
 } from './dashboard/Application';
 import {
@@ -96,6 +97,7 @@ export {
     ApplicationSyntheticCheck,
     ApplicationStatus,
     ApplicationEnvironment,
+    MonitorState,
     StatusOverride,
     Contact,
     ContactRole,

@@ -11,10 +11,14 @@ import {
     PortfolioRollup,
     StatusCounts,
 } from '../../models/portfolio.model';
+import { countMonitorsByState, MonitorStateCounts } from '../../monitor-rollup.util';
+import { findNode, getAllApps } from '../../portfolio-tree.util';
 import DashboardDataModeService from '../../services/dashboard-data-mode.service';
 import DashboardNavStateService from '../../services/dashboard-nav-state.service';
 import DashboardScopeService from '../../services/dashboard-scope.service';
 import DashboardService from '../../services/dashboard.service';
+import { countSloByState, SloStateCounts } from '../../slo-rollup.util';
+import { countSyntheticsByState, SyntheticStateCounts } from '../../synthetic-rollup.util';
 
 /**
  *
@@ -117,6 +121,17 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     topRiskNodesCache: PortfolioNode[] = [];
 
     topRiskAppsCache: PortfolioApp[] = [];
+
+    monitorRollupCache: MonitorStateCounts = { ok: 0, warn: 0, alert: 0, noData: 0 };
+
+    sloRollupCache: SloStateCounts = { healthy: 0, atRisk: 0, breaching: 0, noSlo: 0 };
+  
+    syntheticRollupCache: SyntheticStateCounts = {
+        passing: 0,
+        degraded: 0,
+        noData: 0,
+        paused: 0,
+    };
 
     expandedTreeNodes = new Set<string>();
 
@@ -229,16 +244,15 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Collects every application in the provided subtree.
+     * Collects every application in the provided subtree. Delegates to the extracted
+     * pure `getAllApps` (US-2.4, `portfolio-tree.util.ts`) so the tile's count and the
+     * firing-monitors list share the exact same traversal.
      * @param {object} node - portfolio node to traverse
      * @returns {object[]} flattened application list
      */
+    // eslint-disable-next-line class-methods-use-this
     getAllApps(node: PortfolioNode): PortfolioApp[] {
-        let apps = [...(node.apps || [])];
-        (node.children || []).forEach((c) => {
-            apps = apps.concat(this.getAllApps(c));
-        });
-        return apps;
+        return getAllApps(node);
     }
 
     /**
@@ -305,19 +319,15 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Finds a node by id within the portfolio tree.
+     * Finds a node by id within the portfolio tree. Delegates to the extracted pure
+     * `findNode` (US-2.4, `portfolio-tree.util.ts`); defaults `node` to `this.data` for
+     * the existing call sites that omit it.
      * @param {string} id - node id to find
      * @param {object} node - current tree branch
      * @returns {object | null} matching node when found
      */
     findNode(id: string, node: PortfolioNode = this.data): PortfolioNode | null {
-        if (node.id === id) return node;
-
-        return (
-            (node.children || [])
-                .map((child) => this.findNode(id, child))
-                .find((child): child is PortfolioNode => child !== null) || null
-        );
+        return findNode(id, node);
     }
 
     /**
@@ -478,6 +488,27 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Opens the US-2.4 firing-monitors drill-down for the currently selected node,
+     * saving the current node and scroll position (same mechanism as
+     * {@link openAppDetail}) so "Back to Portfolio" restores exactly where the user
+     * clicked the Monitors tile from.
+     * @returns {void}
+     */
+    openFiringMonitors(): void {
+        const scrollEl = document.querySelector('.table-scroll');
+        const scrollTop = scrollEl instanceof HTMLElement ? scrollEl.scrollTop : 0;
+        this.navStateService.saveNodeContext(
+            this.currentNode.id,
+            scrollTop,
+            new Set(this.expandedTreeNodes),
+            new Set(this.expandedSections)
+        );
+        this.router.navigate(['/dashboard/monitors'], {
+            queryParams: { scope: this.currentNode.id },
+        });
+    }
+
+    /**
      * Resolves the UI label for a health status.
      * @param {string} status - health status value
      * @returns {string} display label
@@ -500,6 +531,53 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
 
     /** 5 maturity segment descriptors (cls + per-block `.prov-cell` tooltip); shared builder, pass signals. */
     readonly maturitySegments = buildMaturitySegments;
+
+    /** Tooltip for the Monitors rollup tile (US-1.4). */
+    readonly monitorRollupTooltip = formatMetricTooltip(METRIC_DESCRIPTIONS.monitorRollup);
+  
+   /** Tooltip for the SLO / Budget rollup tile (US-1.1). */
+    readonly sloRollupTooltip = formatMetricTooltip(METRIC_DESCRIPTIONS.sloRollup);
+
+    /**
+     * Navigates to the SLO drill-down page, scoped to the current tree node.
+     * Saves nav state so the portfolio page restores its position on return.
+     * @returns {void}
+     */
+    openSloBudget(): void {
+        const scrollEl = document.querySelector('.table-scroll');
+        const scrollTop = scrollEl instanceof HTMLElement ? scrollEl.scrollTop : 0;
+        this.navStateService.saveNodeContext(
+            this.currentNode.id,
+            scrollTop,
+            new Set(this.expandedTreeNodes),
+            new Set(this.expandedSections)
+        );
+        this.router.navigate(['/dashboard/slo'], {
+            queryParams: { scope: this.currentNode.id },
+        });
+    }
+
+    /** Tooltip for the Synthetics rollup tile (US-4.2). */
+    readonly syntheticRollupTooltip = formatMetricTooltip(METRIC_DESCRIPTIONS.syntheticRollup);
+
+    /**
+     * Navigates to the synthetics drill-down page, scoped to the current tree node.
+     * Saves nav state so the portfolio page restores its position on return.
+     * @returns {void}
+     */
+    openSynthetics(): void {
+        const scrollEl = document.querySelector('.table-scroll');
+        const scrollTop = scrollEl instanceof HTMLElement ? scrollEl.scrollTop : 0;
+        this.navStateService.saveNodeContext(
+            this.currentNode.id,
+            scrollTop,
+            new Set(this.expandedTreeNodes),
+            new Set(this.expandedSections)
+        );
+        this.router.navigate(['/dashboard/synthetics'], {
+            queryParams: { scope: this.currentNode.id },
+        });
+    }
 
     // 11-2 burn-rate (error-budget burn) ----------------------------------------
 
@@ -612,6 +690,9 @@ export default class PortfolioPageComponent implements OnInit, OnDestroy {
     private recomputeTopRisks(): void {
         this.topRiskNodesCache = this.computeTopRiskNodes();
         this.topRiskAppsCache = this.computeTopRiskApps();
+        this.monitorRollupCache = countMonitorsByState(this.getAllApps(this.currentNode));
+        this.sloRollupCache = countSloByState(this.getAllApps(this.currentNode));
+        this.syntheticRollupCache = countSyntheticsByState(this.getAllApps(this.currentNode));
     }
 
     /**

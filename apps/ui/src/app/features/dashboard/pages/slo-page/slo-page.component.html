@@ -1,0 +1,71 @@
+@if (loadError) {
+    <div class="slo-state slo-state-error">{{ loadError }}</div>
+} @else if (isLoading) {
+    <div class="slo-state">Loading SLO data...</div>
+} @else {
+    <div class="slo-screen">
+        <div class="slo-header">
+            <button type="button" class="back-link" (click)="goBack()">← Back to Dashboard</button>
+            <h1 class="page-title">SLO / Error Budget</h1>
+        </div>
+
+        <div class="incident-filters">
+            <label>
+                State
+                <select [(ngModel)]="stateFilter" (ngModelChange)="applyFilters()">
+                    <option value="">All</option>
+                    <option value="breaching">Breaching</option>
+                    <option value="atRisk">At-risk</option>
+                    <option value="healthy">Healthy</option>
+                    <option value="noSlo">No SLO</option>
+                </select>
+            </label>
+            <label *ngIf="businessUnits.length">
+                Business Unit
+                <select [(ngModel)]="buFilter" (ngModelChange)="applyFilters()">
+                    <option value="">All</option>
+                    <option *ngFor="let bu of businessUnits" [value]="bu">{{ bu }}</option>
+                </select>
+            </label>
+        </div>
+
+        @if (filteredRows.length === 0) {
+            <div class="slo-empty">No applications match the current filters.</div>
+        } @else {
+            <div class="card">
+                <div class="table-scroll">
+                    <table class="slo-table">
+                        <thead>
+                            <tr>
+                                <th>App</th>
+                                <th>SLA Target</th>
+                                <th>Uptime 30d</th>
+                                <th>Error Budget Remaining</th>
+                                <th>Burn Rate</th>
+                                <th>State</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let row of filteredRows">
+                                <td>{{ row.appName }}</td>
+                                <td>{{ formatTarget(row.slaTarget) }}</td>
+                                <td>{{ formatPct(row.uptime) }}</td>
+                                <td [ngClass]="stateClass(row.state)">
+                                    {{ formatPct(row.errorBudgetRemainingPct) }}
+                                </td>
+                                <td [ngClass]="burnBandClass(row.burnBand)">
+                                    {{ burnBandLabel(row.burnBand) }}
+                                </td>
+                                <td>
+                                    <span class="state-badge" [ngClass]="stateClass(row.state)">
+                                        {{ stateLabel(row.state) }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}

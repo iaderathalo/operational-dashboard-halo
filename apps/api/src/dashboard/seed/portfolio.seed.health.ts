@@ -1,5 +1,10 @@
 import { PortfolioNode } from '../portfolio.model';
-import createApp from './portfolio.seed.shared';
+import createApp, {
+    SEED_MONITORS_ALERT,
+    SEED_MONITORS_GREEN,
+    SEED_MONITORS_NO_DATA,
+    SEED_MONITORS_WARN,
+} from './portfolio.seed.shared';
 
 const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
     id: 'bu1',
@@ -22,7 +27,8 @@ const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
                     99.88,
                     310,
                     1,
-                    '12 days ago'
+                    '12 days ago',
+                    SEED_MONITORS_GREEN
                 ),
                 createApp(
                     'bu1-ea-mercer-beacon',
@@ -32,7 +38,8 @@ const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
                     99.92,
                     150,
                     0,
-                    '45 days ago'
+                    '45 days ago',
+                    SEED_MONITORS_WARN
                 ),
                 createApp(
                     'bu1-ea-mercer-intellify',
@@ -101,7 +108,8 @@ const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
                     99.3,
                     340,
                     2,
-                    '3 days ago'
+                    '3 days ago',
+                    SEED_MONITORS_ALERT
                 ),
                 createApp(
                     'bu1-cs-chat-bot',
@@ -111,7 +119,8 @@ const HEALTH_PORTFOLIO_NODE: PortfolioNode = {
                     99.94,
                     8200,
                     0,
-                    '28 days ago'
+                    '28 days ago',
+                    SEED_MONITORS_NO_DATA
                 ),
                 createApp(
                     'bu1-cs-feedback-collector',

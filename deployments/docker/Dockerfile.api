@@ -37,15 +37,16 @@ ARG DIST_FOLDER_LOCATION
 
 COPY --chown=node:node $DIST_FOLDER_LOCATION /home/node/app/
 COPY --chown=node:node ./package-lock.json /home/node/app/
-COPY .npmrc .npmrc
+COPY --chown=node:node .npmrc .npmrc
 
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force && rm -f .npmrc
+
+COPY --chown=node:node ./deployments/docker/entrypoint.sh ./entrypoint.sh
+RUN chmod u+x entrypoint.sh
 
 EXPOSE  8080
 
-USER root
-COPY --chown=node:node ./deployments/docker/entrypoint.sh ./entrypoint.sh
-RUN chmod u+x entrypoint.sh
+USER node
 ENTRYPOINT ["./entrypoint.sh"]
 CMD [ "node", "./main.js" ]
 
